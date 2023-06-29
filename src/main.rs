@@ -4,9 +4,10 @@ use std::{
     io::{self, prelude::*, BufWriter},
 };
 
-use log::info;
+use log::{info, LevelFilter};
 
 fn main() {
+    log::set_max_level(LevelFilter::Debug);
     let options = zopfli::Options::default();
     let output_type = zopfli::Format::Gzip;
 
