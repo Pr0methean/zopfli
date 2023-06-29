@@ -78,7 +78,7 @@ pub struct Options {
     #[cfg_attr(
         test,
         proptest(
-            strategy = "(1..=10u64).prop_map(|iteration_count| Some(NonZeroU64::new(iteration_count)))"
+            strategy = "(1..=10u64).prop_map(|iteration_count| NonZeroU64::new(iteration_count))"
         )
     )]
     pub iteration_count: Option<NonZeroU64>,
