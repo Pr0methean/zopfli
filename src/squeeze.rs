@@ -32,7 +32,7 @@ use lockfree_object_pool::LinearObjectPool;
 use log::debug;
 use once_cell::sync::Lazy;
 use ordered_float::OrderedFloat;
-use smallvec::{SmallVec, smallvec};
+use smallvec::{smallvec, SmallVec};
 
 use crate::{
     cache::Cache,
@@ -669,7 +669,8 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
                     for (j, dists) in dists.iter().enumerate() {
                         if !(i == 0 && j == 0) && !(i == 1 && j == 1) {
                             children.push(SymbolTable {
-                                litlens, dists: *dists
+                                litlens,
+                                dists: *dists,
                             });
                         }
                     }
