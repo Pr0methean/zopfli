@@ -32,6 +32,7 @@ use lockfree_object_pool::LinearObjectPool;
 use log::debug;
 use once_cell::sync::Lazy;
 use ordered_float::OrderedFloat;
+use rand::distributions::{Bernoulli, Distribution};
 use smallvec::{smallvec, SmallVec};
 
 use crate::{
@@ -397,32 +398,36 @@ impl RandomGenomeMutation for SymbolTable {
     where
         R: Rng + Sized,
     {
+        let mutation_distro = Bernoulli::new(mutation_rate).unwrap();
         genome.litlens.iter_mut().for_each(|litlen| {
-            Self::mutate_plus_or_minus_1(mutation_rate, *min_value, *max_value, rng, litlen);
+            Self::mutate_plus_or_minus_1(mutation_distro, *min_value, *max_value, rng, litlen);
         });
         genome.dists.iter_mut().for_each(|dist| {
-            Self::mutate_plus_or_minus_1(mutation_rate, *min_value, *max_value, rng, dist);
+            Self::mutate_plus_or_minus_1(mutation_distro, *min_value, *max_value, rng, dist);
         });
         genome
     }
 }
 
+static FIFTY_FIFTY: Bernoulli = Bernoulli::new(0.5).unwrap();
+
 impl SymbolTable {
-    fn mutate_plus_or_minus_1<R>(
-        mutation_rate: f64,
+    fn mutate_plus_or_minus_1<R, D>(
+        mutation_chance_distribution: D,
         min_value: usize,
         max_value: usize,
         rng: &mut R,
         litlen: &mut usize,
     ) where
         R: Rng + Sized,
+        D: Distribution<bool>,
     {
-        if rng.gen::<f64>() < mutation_rate {
+        if mutation_chance_distribution.sample(rng) {
             if *litlen <= min_value {
                 *litlen += 1;
             } else if *litlen >= max_value {
                 *litlen -= 1;
-            } else if rng.gen_bool(0.5) {
+            } else if FIFTY_FIFTY.sample(rng) {
                 *litlen += 1;
             } else {
                 *litlen -= 1;

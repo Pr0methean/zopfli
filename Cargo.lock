@@ -900,6 +900,7 @@ dependencies = [
  "ordered-float",
  "proptest",
  "proptest-derive",
+ "rand",
  "simd-adler32",
  "smallvec",
  "typed-arena",
