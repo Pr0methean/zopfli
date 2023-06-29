@@ -483,7 +483,7 @@ impl Fitness for FloatAsFitness {
     }
 }
 
-impl<'a, C> FitnessFunction<SymbolTable, FloatAsFitness> for ZopfliBlockState<'a, C>
+impl<'a, C> FitnessFunction<SymbolTable, FloatAsFitness> for &'a ZopfliBlockState<'a, C>
 where
     C: Cache,
 {
@@ -661,7 +661,7 @@ const POPULATION_SIZE: usize = 10;
 /// If `instart` is larger than 0, it uses values before `instart` as starting
 /// dictionary.
 pub fn lz77_optimal<C: Cache>(
-    s: &mut ZopfliBlockState<C>,
+    s: &ZopfliBlockState<C>,
     in_data: &[u8],
     max_iterations: Option<u64>,
     max_iterations_without_improvement: Option<u64>,

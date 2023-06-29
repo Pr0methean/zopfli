@@ -138,7 +138,7 @@ impl Lz77Store {
     /// dictionary.
     pub fn greedy<C: Cache>(
         &mut self,
-        s: &mut ZopfliBlockState<C>,
+        s: &ZopfliBlockState<C>,
         in_data: &[u8],
         instart: usize,
         inend: usize,
