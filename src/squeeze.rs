@@ -483,7 +483,7 @@ impl Fitness for FloatAsFitness {
     }
 }
 
-impl<'a, C> FitnessFunction<SymbolTable, FloatAsFitness> for &'a ZopfliBlockState<'a, C>
+impl<'a, C> FitnessFunction<SymbolTable, FloatAsFitness> for ZopfliBlockState<'a, C>
 where
     C: Cache,
 {
@@ -687,7 +687,7 @@ pub fn lz77_optimal<C: Cache>(
         .of_size(POPULATION_SIZE)
         .uniform_at_random();
     let algorithm = genetic_algorithm()
-        .with_evaluation(&*s)
+        .with_evaluation(s)
         .with_selection(MaximizeSelector::new(0.85, 12))
         .with_crossover(SymbolTableCrossBreeder::default())
         .with_mutation(RandomValueMutator::new(
@@ -732,7 +732,7 @@ pub fn lz77_optimal<C: Cache>(
                 let best = s.best.lock().unwrap();
                 return best.clone().unwrap().0;
             }
-            Err(e) => panic!("{}", e),
+            Err(e) => panic!("{:?}", e),
         }
     }
 }
