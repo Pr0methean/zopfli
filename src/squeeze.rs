@@ -688,7 +688,7 @@ pub fn lz77_optimal<C: Cache>(
         .uniform_at_random();
     let algorithm = genetic_algorithm()
         .with_evaluation(s)
-        .with_selection(MaximizeSelector::new(0.85, 12))
+        .with_selection(MaximizeSelector::new(0.85, 1))
         .with_crossover(SymbolTableCrossBreeder::default())
         .with_mutation(RandomValueMutator::new(
             0.2,
