@@ -754,19 +754,23 @@ pub fn lz77_optimal<C: Cache>(
         ))
         .build();
     loop {
+        let mut prev_best = f64::NEG_INFINITY;
         match genetic_algorithm_sim.step() {
             Ok(SimResult::Intermediate(step)) => {
-                let evaluated_population = step.result.evaluated_population;
                 let best_solution = step.result.best_solution;
-                debug!(
-                    "step: generation: {}, average_fitness: {}, \
-                     best fitness: {}, duration: {}, processing_time: {}",
-                    step.iteration,
-                    evaluated_population.average_fitness(),
-                    best_solution.solution.fitness,
-                    step.duration,
-                    step.processing_time,
-                );
+                if best_solution.solution.fitness.0.0 > prev_best {
+                    let evaluated_population = step.result.evaluated_population;
+                    prev_best = best_solution.solution.fitness.0.0;
+                    debug!(
+                        "step: generation: {}, average_fitness: {}, \
+                         best fitness: {}, duration: {}, processing_time: {}",
+                        step.iteration,
+                        evaluated_population.average_fitness(),
+                        best_solution.solution.fitness,
+                        step.duration,
+                        step.processing_time,
+                    );
+                }
             }
             Ok(SimResult::Final(step, processing_time, duration, stop_reason)) => {
                 debug!(
