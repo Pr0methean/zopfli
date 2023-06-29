@@ -21,7 +21,7 @@ jobs:
           - conf: nightly
             toolchain: nightly
           - conf: msrv
-            toolchain: '1.66'
+            toolchain: '1.70'
     env:
       RUST_BACKTRACE: 1
 
