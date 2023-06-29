@@ -695,7 +695,7 @@ pub fn lz77_optimal<C: Cache>(
             0,
             max_litlen_freq.max(max_dist_freq),
         ))
-        .with_reinsertion(ElitistReinserter::new(&*s, false, 0.85))
+        .with_reinsertion(ElitistReinserter::new(s, false, 0.85))
         .with_initial_population(initial_population)
         .build();
     let mut genetic_algorithm_sim = simulate(algorithm)
