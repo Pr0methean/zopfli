@@ -758,9 +758,9 @@ pub fn lz77_optimal<C: Cache>(
         match genetic_algorithm_sim.step() {
             Ok(SimResult::Intermediate(step)) => {
                 let best_solution = step.result.best_solution;
-                if best_solution.solution.fitness.0.0 > prev_best {
+                if best_solution.solution.fitness.0 .0 > prev_best {
                     let evaluated_population = step.result.evaluated_population;
-                    prev_best = best_solution.solution.fitness.0.0;
+                    prev_best = best_solution.solution.fitness.0 .0;
                     debug!(
                         "step: generation: {}, average_fitness: {}, \
                          best fitness: {}, duration: {}, processing_time: {}",
