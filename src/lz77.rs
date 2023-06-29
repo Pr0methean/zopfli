@@ -2,6 +2,8 @@ use alloc::vec::Vec;
 use core::cmp;
 use std::sync::{Arc, Mutex, RwLock};
 
+use dashmap::DashMap;
+
 use crate::{
     cache::{Cache, NoCache, ZopfliLongestMatchCache},
     hash::{Which, ZopfliHash},
@@ -387,6 +389,7 @@ pub struct ZopfliBlockState<'a, C> {
     pub blockstart: usize,
     pub blockend: usize,
     pub best: RwLock<Option<ZopfliOutput>>,
+    pub cached_costs: Arc<DashMap<SymbolTable, f64>>,
 }
 
 impl<'a, C> Clone for ZopfliBlockState<'a, C> {
@@ -398,6 +401,7 @@ impl<'a, C> Clone for ZopfliBlockState<'a, C> {
             blockstart: self.blockstart,
             blockend: self.blockend,
             best: RwLock::new(self.best.read().unwrap().clone()),
+            cached_costs: self.cached_costs.clone(),
         }
     }
 }
@@ -413,6 +417,7 @@ impl<'a> ZopfliBlockState<'a, ZopfliLongestMatchCache> {
                 blockend - blockstart,
             ))),
             best: RwLock::new(None),
+            cached_costs: Arc::new(DashMap::new()),
         }
     }
 }
@@ -431,6 +436,7 @@ impl<'a> ZopfliBlockState<'a, NoCache> {
             blockend,
             lmc: Arc::new(Mutex::new(NoCache)),
             best: RwLock::new(None),
+            cached_costs: Arc::new(DashMap::new()),
         }
     }
 }
