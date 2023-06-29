@@ -677,6 +677,8 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
                 }
             }
         }
+        children.sort();
+        children.dedup();
         children
     }
 }
