@@ -669,7 +669,6 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
         R: Rng + Sized,
     {
         let num_parents = parents.len();
-        debug!("Performing crossover between {} parents", num_parents);
         if num_parents < 2 {
             return vec![];
         }
