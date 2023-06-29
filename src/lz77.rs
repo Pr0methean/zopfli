@@ -1,10 +1,11 @@
 use alloc::vec::Vec;
 use core::cmp;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use crate::{
     cache::{Cache, NoCache, ZopfliLongestMatchCache},
     hash::{Which, ZopfliHash},
+    squeeze::SymbolTable,
     symbols::{get_dist_symbol, get_length_symbol},
     util::{
         ZOPFLI_MAX_CHAIN_HITS, ZOPFLI_MAX_MATCH, ZOPFLI_MIN_MATCH, ZOPFLI_NUM_D, ZOPFLI_NUM_LL,
@@ -366,6 +367,13 @@ impl Lz77Store {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct ZopfliOutput {
+    pub stored: Lz77Store,
+    pub stats: SymbolTable,
+    pub cost: f64,
+}
+
 /// Some state information for compressing a block.
 /// This is currently a bit under-used (with mainly only the longest match cache),
 /// but is kept for easy future expansion.
@@ -378,7 +386,7 @@ pub struct ZopfliBlockState<'a, C> {
     /* The start (inclusive) and end (not inclusive) of the current block. */
     pub blockstart: usize,
     pub blockend: usize,
-    pub best: Mutex<Option<(Lz77Store, f64)>>,
+    pub best: RwLock<Option<ZopfliOutput>>,
 }
 
 impl<'a, C> Clone for ZopfliBlockState<'a, C> {
@@ -389,7 +397,7 @@ impl<'a, C> Clone for ZopfliBlockState<'a, C> {
             lmc: self.lmc.clone(),
             blockstart: self.blockstart,
             blockend: self.blockend,
-            best: Mutex::new(self.best.lock().unwrap().clone()),
+            best: RwLock::new(self.best.read().unwrap().clone()),
         }
     }
 }
@@ -404,7 +412,7 @@ impl<'a> ZopfliBlockState<'a, ZopfliLongestMatchCache> {
             lmc: Arc::new(Mutex::new(ZopfliLongestMatchCache::new(
                 blockend - blockstart,
             ))),
-            best: Mutex::new(None),
+            best: RwLock::new(None),
         }
     }
 }
@@ -422,7 +430,7 @@ impl<'a> ZopfliBlockState<'a, NoCache> {
             blockstart,
             blockend,
             lmc: Arc::new(Mutex::new(NoCache)),
-            best: Mutex::new(None),
+            best: RwLock::new(None),
         }
     }
 }

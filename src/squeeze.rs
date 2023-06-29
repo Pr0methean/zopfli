@@ -13,7 +13,7 @@ use core::{
     fmt::{Debug, Display, Formatter},
     ops::DerefMut,
 };
-use std::iter;
+use std::{iter, ops::Deref};
 
 use genevo::{
     ga,
@@ -38,7 +38,7 @@ use crate::{
     cache::Cache,
     deflate::{calculate_block_size, BlockType},
     hash::ZopfliHash,
-    lz77::{find_longest_match, LitLen, Lz77Store, ZopfliBlockState},
+    lz77::{find_longest_match, LitLen, Lz77Store, ZopfliBlockState, ZopfliOutput},
     symbols::{get_dist_extra_bits, get_dist_symbol, get_length_extra_bits, get_length_symbol},
     util::{ZOPFLI_MAX_MATCH, ZOPFLI_NUM_D, ZOPFLI_NUM_LL, ZOPFLI_WINDOW_MASK, ZOPFLI_WINDOW_SIZE},
 };
@@ -80,7 +80,7 @@ fn get_cost_stat(litlen: usize, dist: u16, stats: &SymbolStats) -> f64 {
 }
 
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
-struct SymbolTable {
+pub struct SymbolTable {
     /* The literal and length symbols. */
     litlens: [usize; ZOPFLI_NUM_LL],
     /* The 32 unique dist symbols, not the 32768 possible dists. */
@@ -489,6 +489,17 @@ where
     C: Cache,
 {
     fn fitness_of(&self, a: &SymbolTable) -> FloatAsFitness {
+        let read_best = self.best.read().unwrap();
+        let best_before = match read_best.deref() {
+            None => f64::INFINITY,
+            Some(output) => {
+                if output.stats == *a {
+                    return (-output.cost).into();
+                }
+                output.cost
+            }
+        };
+        drop(read_best);
         let stats = SymbolStats::from(*a);
         let pool = &*LZ77_STORE_POOL;
         let mut currentstore = pool.pull();
@@ -500,14 +511,25 @@ where
             &mut h,
         );
         let cost = calculate_block_size(&currentstore, 0, currentstore.size(), BlockType::Dynamic);
-        let mut best = self.best.lock().unwrap();
-        let best = best.deref_mut();
-        match best {
-            None => *best = Some((currentstore.clone(), cost)),
-            Some((ref mut best_store, ref mut best_cost)) => {
-                if cost < *best_cost {
-                    *best_cost = cost;
-                    *best_store = currentstore.clone();
+        if cost < best_before {
+            let mut best = self.best.write().unwrap();
+            let best = best.deref_mut();
+            match best {
+                None => {
+                    *best = Some(ZopfliOutput {
+                        stored: currentstore.clone(),
+                        stats: stats.table,
+                        cost,
+                    })
+                }
+                Some(best_after) => {
+                    if cost < best_after.cost {
+                        *best_after = ZopfliOutput {
+                            stored: currentstore.clone(),
+                            stats: stats.table,
+                            cost,
+                        };
+                    }
                 }
             }
         }
@@ -757,8 +779,8 @@ pub fn lz77_optimal<C: Cache>(
                     processing_time,
                     stop_reason
                 );
-                let best = s.best.lock().unwrap();
-                return best.clone().unwrap().0;
+                let best = s.best.read().unwrap();
+                return best.clone().unwrap().stored;
             }
             Err(e) => panic!("{:?}", e),
         }
