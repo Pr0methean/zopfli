@@ -641,6 +641,9 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
     where
         R: Rng + Sized,
     {
+        if parents.len() < 2 {
+            return vec![];
+        }
         let litlens = generate_child_chromosomes(parents[0].litlens, parents[1].litlens, rng);
         let dists = generate_child_chromosomes(parents[0].dists, parents[1].dists, rng);
         litlens
