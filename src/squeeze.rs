@@ -626,7 +626,7 @@ fn generate_child_chromosomes<T, const N: usize, R>(
     rng: &mut R,
 ) -> SmallVec<[[T; N]; 4]>
 where
-    T: Copy,
+    T: Copy + PartialEq,
     R: Rng + Sized,
 {
     if parent0 == parent1 {
@@ -665,12 +665,11 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
                     generate_child_chromosomes(first_parent.litlens, second_parent.litlens, rng);
                 let dists =
                     generate_child_chromosomes(first_parent.dists, second_parent.dists, rng);
-                for (i, litlen) in litlens.into_iter().enumerate() {
-                    for (j, dist) in dists.into_iter().enumerate() {
+                for (i, litlens) in litlens.into_iter().enumerate() {
+                    for (j, dists) in dists.iter().enumerate() {
                         if !(i == 0 && j == 0) && !(i == 1 && j == 1) {
                             children.push(SymbolTable {
-                                litlens: litlens[i],
-                                dists: dists[j],
+                                litlens, dists: *dists
                             });
                         }
                     }
