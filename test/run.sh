@@ -20,11 +20,10 @@ cd test/results
 find . -type f | while read -r file; do
   reference_size=$(stat -c%s "../../test/temp_compressed/$file")
   current_result_size=$(stat -c%s "$file")
+  echo "File size for $file: $current_result_size vs $reference_size bytes"
   if [[ $current_result_size > $((reference_size + 60)) ]]; then
     echo "File $file is larger than expected ($current_result_size vs $reference_size bytes)"
     exit 1
-  elif [[ $current_result_size < $reference_size ]]; then
-    echo "Compression ratio improved for $file! ($current_result_size vs $reference_size bytes)"
   fi
 done
 cd ../..
