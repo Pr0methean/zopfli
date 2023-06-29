@@ -32,6 +32,7 @@ use lockfree_object_pool::LinearObjectPool;
 use log::debug;
 use once_cell::sync::Lazy;
 use ordered_float::OrderedFloat;
+use smallvec::{SmallVec, smallvec};
 
 use crate::{
     cache::Cache,
@@ -520,7 +521,7 @@ where
     }
 
     fn highest_possible_fitness(&self) -> FloatAsFitness {
-        (-1.0).into()
+        (-8.0).into()
     }
 
     fn lowest_possible_fitness(&self) -> FloatAsFitness {
@@ -589,8 +590,8 @@ where
             StopFlag::StopNow("Maximum generations reached".into())
         } else {
             let fitness = state.result.best_solution.solution.fitness.0 .0;
-            if fitness >= -1.0 {
-                StopFlag::StopNow("Already only 1 bit".into())
+            if fitness >= -8.0 {
+                StopFlag::StopNow("Already only 1 byte".into())
             } else if fitness > self.current_best {
                 self.current_best = fitness;
                 self.generations_without_improvement = 0;
@@ -623,17 +624,21 @@ fn generate_child_chromosomes<T, const N: usize, R>(
     parent0: [T; N],
     parent1: [T; N],
     rng: &mut R,
-) -> [[T; N]; 4]
+) -> SmallVec<[[T; N]; 4]>
 where
     T: Copy,
     R: Rng + Sized,
 {
-    let cut_point = rng.gen_range(1..N as i32) as usize;
-    let mut hybrid_0 = parent0;
-    hybrid_0[cut_point..].copy_from_slice(&parent1[cut_point..]);
-    let mut hybrid_1 = parent1;
-    hybrid_1[cut_point..].copy_from_slice(&parent0[cut_point..]);
-    [parent0, parent1, hybrid_0, hybrid_1]
+    if parent0 == parent1 {
+        smallvec![parent0]
+    } else {
+        let cut_point = rng.gen_range(1..N as i32) as usize;
+        let mut hybrid_0 = parent0;
+        hybrid_0[cut_point..].copy_from_slice(&parent1[cut_point..]);
+        let mut hybrid_1 = parent1;
+        hybrid_1[cut_point..].copy_from_slice(&parent0[cut_point..]);
+        smallvec![parent0, parent1, hybrid_0, hybrid_1]
+    }
 }
 
 impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
@@ -651,12 +656,17 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
             let first_parent = &parents[first_parent_index];
             for second_parent_index in first_parent_index + 1..num_parents {
                 let second_parent = &parents[second_parent_index];
+                if first_parent.litlens == second_parent.litlens {
+                    if first_parent.dists == second_parent.dists {
+                        continue;
+                    }
+                }
                 let litlens =
                     generate_child_chromosomes(first_parent.litlens, second_parent.litlens, rng);
                 let dists =
                     generate_child_chromosomes(first_parent.dists, second_parent.dists, rng);
-                for i in 0..4 {
-                    for j in 0..4 {
+                for (i, litlen) in litlens.into_iter().enumerate() {
+                    for (j, dist) in dists.into_iter().enumerate() {
                         if !(i == 0 && j == 0) && !(i == 1 && j == 1) {
                             children.push(SymbolTable {
                                 litlens: litlens[i],
