@@ -401,10 +401,10 @@ impl RandomGenomeMutation for SymbolTable {
     {
         let mutation_distro = Bernoulli::new(mutation_rate).unwrap();
         genome.litlens.iter_mut().for_each(|litlen| {
-            Self::mutate_plus_or_minus_1(mutation_distro, *min_value, *max_value, rng, litlen);
+            Self::mutate_single_usize(mutation_distro, *min_value, *max_value, rng, litlen);
         });
         genome.dists.iter_mut().for_each(|dist| {
-            Self::mutate_plus_or_minus_1(mutation_distro, *min_value, *max_value, rng, dist);
+            Self::mutate_single_usize(mutation_distro, *min_value, *max_value, rng, dist);
         });
         genome
     }
@@ -413,7 +413,7 @@ impl RandomGenomeMutation for SymbolTable {
 static FIFTY_FIFTY: Lazy<Bernoulli> = Lazy::new(|| Bernoulli::new(0.5).unwrap());
 
 impl SymbolTable {
-    fn mutate_plus_or_minus_1<R, D>(
+    fn mutate_single_usize<R, D>(
         mutation_chance_distribution: D,
         min_value: usize,
         max_value: usize,
@@ -424,15 +424,7 @@ impl SymbolTable {
         D: Distribution<bool>,
     {
         if mutation_chance_distribution.sample(rng) {
-            if *litlen <= min_value {
-                *litlen += 1;
-            } else if *litlen >= max_value {
-                *litlen -= 1;
-            } else if FIFTY_FIFTY.sample(rng) {
-                *litlen += 1;
-            } else {
-                *litlen -= 1;
-            }
+            *litlen = rng.gen_range(min_value..=max_value);
         }
     }
 }
