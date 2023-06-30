@@ -409,25 +409,29 @@ where
     where
         R: Rng + Sized,
     {
-        genome.litlens.iter_mut().for_each(|litlen| {
-            mutate_single_usize(
-                &self.mutation_chance_distro,
-                0,
-                self.max_litlen_freq,
-                rng,
-                litlen,
-            );
-        });
-        genome.dists.iter_mut().for_each(|dist| {
-            mutate_single_usize(
-                &self.mutation_chance_distro,
-                0,
-                self.max_dist_freq,
-                rng,
-                dist,
-            );
-        });
-        genome.litlens[256] = 1; // end symbol
+        let mut changed = false;
+        while !changed {
+            genome.litlens.iter_mut().enumerate().for_each(|(index, litlen)| {
+                if index != 256 { // don't mutate the end symbol
+                    changed |= mutate_single_usize(
+                        &self.mutation_chance_distro,
+                        0,
+                        self.max_litlen_freq,
+                        rng,
+                        litlen,
+                    );
+                }
+            });
+            genome.dists.iter_mut().for_each(|dist| {
+                changed |= mutate_single_usize(
+                    &self.mutation_chance_distro,
+                    0,
+                    self.max_dist_freq,
+                    rng,
+                    dist,
+                );
+            });
+        }
         genome
     }
 }
@@ -438,12 +442,17 @@ fn mutate_single_usize<R, D>(
     max_value: usize,
     rng: &mut R,
     litlen: &mut usize,
-) where
+) -> bool where
     R: Rng + Sized,
     D: Distribution<bool>,
 {
     if mutation_chance_distribution.sample(rng) {
-        *litlen = rng.gen_range(min_value..=max_value);
+        let old_litlen = *litlen;
+        let new_litlen = rng.gen_range(min_value..=max_value);
+        *litlen = new_litlen;
+        new_litlen != old_litlen
+    } else {
+        false
     }
 }
 
