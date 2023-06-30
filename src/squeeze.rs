@@ -569,7 +569,7 @@ impl GenomeBuilder<SymbolTable> for SymbolTableBuilder {
         for litlen in table.litlens.iter_mut() {
             *litlen = rng.gen_range(0..=self.max_litlen_freq);
         }
-        genome.litlens[256] = 1; // end symbol
+        litlens[256] = 1; // end symbol
         for dist in table.dists.iter_mut() {
             *dist = rng.gen_range(0..=self.max_dist_freq);
         }
