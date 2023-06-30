@@ -406,6 +406,7 @@ impl RandomGenomeMutation for SymbolTable {
         genome.dists.iter_mut().for_each(|dist| {
             Self::mutate_single_usize(mutation_distro, *min_value, *max_value, rng, dist);
         });
+        genome.litlens[256] = 1; // end symbol
         genome
     }
 }
@@ -568,6 +569,7 @@ impl GenomeBuilder<SymbolTable> for SymbolTableBuilder {
         for litlen in table.litlens.iter_mut() {
             *litlen = rng.gen_range(0..=self.max_litlen_freq);
         }
+        genome.litlens[256] = 1; // end symbol
         for dist in table.dists.iter_mut() {
             *dist = rng.gen_range(0..=self.max_dist_freq);
         }
