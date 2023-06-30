@@ -715,8 +715,6 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
     }
 }
 
-const POPULATION_SIZE: usize = 10;
-
 /// Calculates lit/len and dist pairs for given data.
 /// If `instart` is larger than 0, it uses values before `instart` as starting
 /// dictionary.
@@ -726,6 +724,12 @@ pub fn lz77_optimal<C: Cache>(
     max_iterations: Option<u64>,
     max_iterations_without_improvement: Option<u64>,
 ) -> Lz77Store {
+    const POPULATION_SIZE: usize = 10;
+    const SELECTION_RATIO: f64 = 0.85;
+    const NUM_INDIVIDUALS_PER_PARENT: usize = 2;
+    const MUTATION_RATE: f64 = 0.2;
+    const REPLACE_RATIO: f64 = 0.85;
+
     let instart = s.blockstart;
     let inend = s.blockend;
     /* Dist to get to here with smallest cost. */
@@ -748,14 +752,14 @@ pub fn lz77_optimal<C: Cache>(
         .uniform_at_random();
     let algorithm = genetic_algorithm()
         .with_evaluation(s)
-        .with_selection(MaximizeSelector::new(0.85, 2))
+        .with_selection(MaximizeSelector::new(SELECTION_RATIO, NUM_INDIVIDUALS_PER_PARENT))
         .with_crossover(SymbolTableCrossBreeder::default())
         .with_mutation(SymbolTableMutator {
-            mutation_chance_distro: Bernoulli::new(0.2).unwrap(),
+            mutation_chance_distro: Bernoulli::new(MUTATION_RATE).unwrap(),
             max_litlen_freq,
             max_dist_freq,
         })
-        .with_reinsertion(ElitistReinserter::new(s, false, 0.85))
+        .with_reinsertion(ElitistReinserter::new(s, false, REPLACE_RATIO))
         .with_initial_population(initial_population)
         .build();
     let mut genetic_algorithm_sim = simulate(algorithm)
