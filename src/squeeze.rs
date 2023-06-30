@@ -19,11 +19,7 @@ use dashmap::mapref::entry::Entry;
 use genevo::{
     ga,
     genetic::{Children, Genotype, Parents},
-    mutation::value::RandomGenomeMutation,
-    operator::{
-        prelude::{ElitistReinserter, RandomValueMutator},
-        CrossoverOp, GeneticOperator,
-    },
+    operator::{prelude::ElitistReinserter, CrossoverOp, GeneticOperator, MutationOp},
     prelude::*,
     selection::truncation::MaximizeSelector,
     simulation::State,
@@ -386,47 +382,68 @@ impl Genotype for SymbolTable {
     type Dna = usize;
 }
 
-impl RandomGenomeMutation for SymbolTable {
-    type Dna = usize;
+#[derive(Copy, Clone, Debug)]
+struct SymbolTableMutator<T>
+where
+    T: Distribution<bool>,
+{
+    mutation_chance_distro: T,
+    max_litlen_freq: usize,
+    max_dist_freq: usize,
+}
 
-    fn mutate_genome<R>(
-        mut genome: Self,
-        mutation_rate: f64,
-        min_value: &<Self as Genotype>::Dna,
-        max_value: &<Self as Genotype>::Dna,
-        rng: &mut R,
-    ) -> Self
+impl<T> GeneticOperator for SymbolTableMutator<T>
+where
+    T: Distribution<bool> + Clone,
+{
+    fn name() -> String {
+        "SymbolTableMutator".to_string()
+    }
+}
+
+impl<T> MutationOp<SymbolTable> for SymbolTableMutator<T>
+where
+    T: Distribution<bool> + Clone,
+{
+    fn mutate<R>(&self, mut genome: SymbolTable, rng: &mut R) -> SymbolTable
     where
         R: Rng + Sized,
     {
-        let mutation_distro = Bernoulli::new(mutation_rate).unwrap();
         genome.litlens.iter_mut().for_each(|litlen| {
-            Self::mutate_single_usize(mutation_distro, *min_value, *max_value, rng, litlen);
+            mutate_single_usize(
+                &self.mutation_chance_distro,
+                0,
+                self.max_litlen_freq,
+                rng,
+                litlen,
+            );
         });
         genome.dists.iter_mut().for_each(|dist| {
-            Self::mutate_single_usize(mutation_distro, *min_value, *max_value, rng, dist);
+            mutate_single_usize(
+                &self.mutation_chance_distro,
+                0,
+                self.max_dist_freq,
+                rng,
+                dist,
+            );
         });
         genome.litlens[256] = 1; // end symbol
         genome
     }
 }
 
-static FIFTY_FIFTY: Lazy<Bernoulli> = Lazy::new(|| Bernoulli::new(0.5).unwrap());
-
-impl SymbolTable {
-    fn mutate_single_usize<R, D>(
-        mutation_chance_distribution: D,
-        min_value: usize,
-        max_value: usize,
-        rng: &mut R,
-        litlen: &mut usize,
-    ) where
-        R: Rng + Sized,
-        D: Distribution<bool>,
-    {
-        if mutation_chance_distribution.sample(rng) {
-            *litlen = rng.gen_range(min_value..=max_value);
-        }
+fn mutate_single_usize<R, D>(
+    mutation_chance_distribution: &D,
+    min_value: usize,
+    max_value: usize,
+    rng: &mut R,
+    litlen: &mut usize,
+) where
+    R: Rng + Sized,
+    D: Distribution<bool>,
+{
+    if mutation_chance_distribution.sample(rng) {
+        *litlen = rng.gen_range(min_value..=max_value);
     }
 }
 
@@ -569,7 +586,7 @@ impl GenomeBuilder<SymbolTable> for SymbolTableBuilder {
         for litlen in table.litlens.iter_mut() {
             *litlen = rng.gen_range(0..=self.max_litlen_freq);
         }
-        litlens[256] = 1; // end symbol
+        table.litlens[256] = 1; // end symbol
         for dist in table.dists.iter_mut() {
             *dist = rng.gen_range(0..=self.max_dist_freq);
         }
@@ -733,11 +750,11 @@ pub fn lz77_optimal<C: Cache>(
         .with_evaluation(s)
         .with_selection(MaximizeSelector::new(0.85, 2))
         .with_crossover(SymbolTableCrossBreeder::default())
-        .with_mutation(RandomValueMutator::new(
-            0.2,
-            0,
-            max_litlen_freq.max(max_dist_freq),
-        ))
+        .with_mutation(SymbolTableMutator {
+            mutation_chance_distro: Bernoulli::new(0.2).unwrap(),
+            max_litlen_freq,
+            max_dist_freq,
+        })
         .with_reinsertion(ElitistReinserter::new(s, false, 0.85))
         .with_initial_population(initial_population)
         .build();
