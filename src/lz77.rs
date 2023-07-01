@@ -1,6 +1,7 @@
 use alloc::vec::Vec;
 use core::cmp;
 use std::sync::{Arc, Mutex, RwLock};
+
 use moka::sync::Cache as MokaCache;
 
 use crate::{
@@ -435,7 +436,7 @@ impl<'a> ZopfliBlockState<'a, NoCache> {
             blockend,
             lmc: Arc::new(Mutex::new(NoCache)),
             best: RwLock::new(None),
-            score_cache: Arc::new(MokaCache::new(0))
+            score_cache: Arc::new(MokaCache::new(0)),
         }
     }
 }

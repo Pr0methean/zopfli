@@ -410,17 +410,22 @@ where
     {
         let mut changed = false;
         while !changed {
-            genome.litlens.iter_mut().enumerate().for_each(|(index, litlen)| {
-                if index != 256 { // don't mutate the end symbol
-                    changed |= mutate_single_usize(
-                        &self.mutation_chance_distro,
-                        0,
-                        self.max_litlen_freq,
-                        rng,
-                        litlen,
-                    );
-                }
-            });
+            genome
+                .litlens
+                .iter_mut()
+                .enumerate()
+                .for_each(|(index, litlen)| {
+                    if index != 256 {
+                        // don't mutate the end symbol
+                        changed |= mutate_single_usize(
+                            &self.mutation_chance_distro,
+                            0,
+                            self.max_litlen_freq,
+                            rng,
+                            litlen,
+                        );
+                    }
+                });
             genome.dists.iter_mut().for_each(|dist| {
                 changed |= mutate_single_usize(
                     &self.mutation_chance_distro,
@@ -441,7 +446,8 @@ fn mutate_single_usize<R, D>(
     max_value: usize,
     rng: &mut R,
     litlen: &mut usize,
-) -> bool where
+) -> bool
+where
     R: Rng + Sized,
     D: Distribution<bool>,
 {
@@ -513,53 +519,56 @@ where
     C: Cache,
 {
     fn fitness_of(&self, a: &SymbolTable) -> FloatAsFitness {
-        self.score_cache.get_with(*a, || {
-            let read_best = self.best.read().unwrap();
-            let best_before = match read_best.deref() {
-                None => f64::INFINITY,
-                Some(output) => {
-                    if output.stats == *a {
-                        return (-output.cost).into();
+        self.score_cache
+            .get_with(*a, || {
+                let read_best = self.best.read().unwrap();
+                let best_before = match read_best.deref() {
+                    None => f64::INFINITY,
+                    Some(output) => {
+                        if output.stats == *a {
+                            return (-output.cost).into();
+                        }
+                        output.cost
                     }
-                    output.cost
-                }
-            };
-            drop(read_best);
-            let stats = SymbolStats::from(*a);
-            let pool = &*LZ77_STORE_POOL;
-            let mut currentstore = pool.pull();
-            let mut h = ZopfliHash::new();
-            lz77_optimal_run(
-                self,
-                |a, b| get_cost_stat(a, b, &stats),
-                currentstore.deref_mut(),
-                &mut h,
-            );
-            let cost = calculate_block_size(&currentstore, 0, currentstore.size(), BlockType::Dynamic);
-            if cost < best_before {
-                let mut best = self.best.write().unwrap();
-                let best = best.deref_mut();
-                match best {
-                    None => {
-                        *best = Some(ZopfliOutput {
-                            stored: currentstore.clone(),
-                            stats: stats.table,
-                            cost,
-                        })
-                    }
-                    Some(best_after) => {
-                        if cost < best_after.cost {
-                            *best_after = ZopfliOutput {
+                };
+                drop(read_best);
+                let stats = SymbolStats::from(*a);
+                let pool = &*LZ77_STORE_POOL;
+                let mut currentstore = pool.pull();
+                let mut h = ZopfliHash::new();
+                lz77_optimal_run(
+                    self,
+                    |a, b| get_cost_stat(a, b, &stats),
+                    currentstore.deref_mut(),
+                    &mut h,
+                );
+                let cost =
+                    calculate_block_size(&currentstore, 0, currentstore.size(), BlockType::Dynamic);
+                if cost < best_before {
+                    let mut best = self.best.write().unwrap();
+                    let best = best.deref_mut();
+                    match best {
+                        None => {
+                            *best = Some(ZopfliOutput {
                                 stored: currentstore.clone(),
                                 stats: stats.table,
                                 cost,
-                            };
+                            })
+                        }
+                        Some(best_after) => {
+                            if cost < best_after.cost {
+                                *best_after = ZopfliOutput {
+                                    stored: currentstore.clone(),
+                                    stats: stats.table,
+                                    cost,
+                                };
+                            }
                         }
                     }
                 }
-            }
-            -cost
-        }).into()
+                -cost
+            })
+            .into()
     }
 
     fn average(&self, a: &[FloatAsFitness]) -> FloatAsFitness {
