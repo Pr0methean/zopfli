@@ -826,10 +826,9 @@ pub fn lz77_optimal<C: Cache>(
                     prev_best = best_solution.solution.fitness.0 .0;
                     debug!(
                         "step: generation: {}, average_fitness: {}, \
-                         best solution: {:?}, fitness: {}, duration: {}, processing_time: {}",
+                         best fitness: {}, duration: {}, processing_time: {}",
                         step.iteration,
                         evaluated_population.average_fitness(),
-                        best_solution.solution.genome,
                         best_solution.solution.fitness,
                         step.duration,
                         step.processing_time,
@@ -839,9 +838,10 @@ pub fn lz77_optimal<C: Cache>(
             Ok(SimResult::Final(step, processing_time, duration, stop_reason)) => {
                 debug!(
                     "final result: generation: {},\
-                         best fitness: {}, duration: {}, processing_time: {}, stop_reason: {}",
+                         best fitness: {}, symbol table: {:?}, duration: {}, processing_time: {}, stop_reason: {}",
                     step.iteration,
                     step.result.best_solution.solution.fitness,
+                    step.result.best_solution.genotype,
                     duration,
                     processing_time,
                     stop_reason
