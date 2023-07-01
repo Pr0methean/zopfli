@@ -15,7 +15,6 @@ use core::{
 };
 use std::{iter, ops::Deref};
 
-use dashmap::mapref::entry::Entry;
 use genevo::{
     ga,
     genetic::{Children, Genotype, Parents},
@@ -517,13 +516,14 @@ where
         let read_best = self.best.read().unwrap();
         let best_before = match read_best.deref() {
             None => f64::INFINITY,
-            Some(output) => output.cost,
+            Some(output) => {
+                if output.stats == *a {
+                    return (-output.cost).into();
+                }
+                output.cost
+            }
         };
         drop(read_best);
-        let cost_entry = match self.cached_costs.entry(*a) {
-            Entry::Occupied(cost) => return (-cost.get()).into(),
-            Entry::Vacant(empty_entry) => empty_entry,
-        };
         let stats = SymbolStats::from(*a);
         let pool = &*LZ77_STORE_POOL;
         let mut currentstore = pool.pull();
@@ -557,7 +557,6 @@ where
                 }
             }
         }
-        cost_entry.insert(cost);
         (-cost).into()
     }
 
@@ -701,14 +700,20 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
         let mut children = Vec::with_capacity(num_parents * (num_parents + 1) * 7);
         for first_parent_index in 0..num_parents - 1 {
             let first_parent = &parents[first_parent_index];
-            for second_parent in &parents[first_parent_index + 1..] {
+            for second_parent_index in first_parent_index + 1..num_parents {
+                let second_parent = &parents[second_parent_index];
+                if first_parent.litlens == second_parent.litlens {
+                    if first_parent.dists == second_parent.dists {
+                        continue;
+                    }
+                }
                 let litlens =
                     generate_child_chromosomes(first_parent.litlens, second_parent.litlens, rng);
                 let dists =
                     generate_child_chromosomes(first_parent.dists, second_parent.dists, rng);
                 for (i, litlens) in litlens.into_iter().enumerate() {
                     for (j, dists) in dists.iter().enumerate() {
-                        if !((i == 0 && j == 0) || (i == 1 && j == 1)) {
+                        if !(i == 0 && j == 0) && !(i == 1 && j == 1) {
                             children.push(SymbolTable {
                                 litlens,
                                 dists: *dists,
@@ -780,8 +785,8 @@ pub fn lz77_optimal<C: Cache>(
             max_iterations,
         ))
         .build();
-    let mut prev_best = f64::NEG_INFINITY;
     loop {
+        let mut prev_best = f64::NEG_INFINITY;
         match genetic_algorithm_sim.step() {
             Ok(SimResult::Intermediate(step)) => {
                 let best_solution = step.result.best_solution;
