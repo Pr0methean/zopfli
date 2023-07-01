@@ -29,6 +29,7 @@ use log::debug;
 use once_cell::sync::Lazy;
 use ordered_float::OrderedFloat;
 use rand::distributions::{Bernoulli, Distribution};
+use rand::seq::SliceRandom;
 use smallvec::{smallvec, SmallVec};
 
 use crate::{
@@ -623,14 +624,10 @@ impl GenomeBuilder<SymbolTable> for SymbolTableBuilder {
         if index == 0 {
             return self.first_guess;
         }
-        let mut table = SymbolTable::default();
-        for litlen in table.litlens.iter_mut() {
-            *litlen = rng.gen_range(0..=self.max_litlen_freq);
-        }
+        let mut table = self.first_guess;
+        table.litlens.shuffle(rng);
         table.litlens[256] = 1; // end symbol
-        for dist in table.dists.iter_mut() {
-            *dist = rng.gen_range(0..=self.max_dist_freq);
-        }
+        table.dists.shuffle(rng);
         table
     }
 }
