@@ -841,7 +841,7 @@ pub fn lz77_optimal<C: Cache>(
                          best fitness: {}, symbol table: {:?}, duration: {}, processing_time: {}, stop_reason: {}",
                     step.iteration,
                     step.result.best_solution.solution.fitness,
-                    step.result.best_solution.genotype,
+                    step.result.best_solution.solution.genome,
                     duration,
                     processing_time,
                     stop_reason
