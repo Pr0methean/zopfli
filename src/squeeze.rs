@@ -608,6 +608,8 @@ where
 #[derive(Debug)]
 pub struct SymbolTableBuilder {
     first_guess: SymbolTable,
+    max_litlen_freq: usize,
+    max_dist_freq: usize,
 }
 
 impl GenomeBuilder<SymbolTable> for SymbolTableBuilder {
@@ -788,9 +790,11 @@ pub fn lz77_optimal<C: Cache>(
     let mut greedy_stats = SymbolStats::default();
     greedy_stats.get_statistics(&outputstore);
     debug!("Initial symbol table: {:?}", greedy_stats.table);
-    let max_litlen_freq = *greedy_stats.table.litlens.iter().max().unwrap() + 1;
-    let max_dist_freq = *greedy_stats.table.dists.iter().max().unwrap() + 1;
+    let max_litlen_freq = *greedy_stats.table.litlens.iter().max().unwrap();
+    let max_dist_freq = *greedy_stats.table.dists.iter().max().unwrap();
     let genome_builder = SymbolTableBuilder {
+        max_dist_freq,
+        max_litlen_freq,
         first_guess: greedy_stats.table,
     };
     let initial_population = build_population()
