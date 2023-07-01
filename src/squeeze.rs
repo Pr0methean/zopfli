@@ -355,12 +355,12 @@ fn trace(size: usize, length_array: &[u16]) -> Vec<u16> {
 fn lz77_optimal_run<F: Fn(usize, u16) -> f64, C: Cache>(
     s: &ZopfliBlockState<C>,
     in_data: &[u8],
+    instart: usize,
+    inend: usize,
     costmodel: F,
     store: &mut Lz77Store,
     h: &mut ZopfliHash,
 ) {
-    let instart = s.blockstart;
-    let inend = s.blockend;
     let (cost, length_array) = get_best_lengths(s, in_data, instart, inend, costmodel, h);
     let path = trace(inend - instart, &length_array);
     store.follow_path(in_data, instart, inend, path, s);
@@ -389,6 +389,8 @@ pub fn lz77_optimal_fixed<C: Cache>(
     lz77_optimal_run(
         s,
         in_data,
+        instart,
+        inend,
         get_cost_fixed,
         store,
         &mut h,
@@ -765,6 +767,8 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
 pub fn lz77_optimal<C: Cache>(
     s: &ZopfliBlockState<C>,
     in_data: &[u8],
+    instart: usize,
+    inend: usize,
     max_iterations: Option<u64>,
     max_iterations_without_improvement: Option<u64>,
 ) -> Lz77Store {
