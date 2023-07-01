@@ -774,7 +774,7 @@ pub fn lz77_optimal<C: Cache>(
     const POPULATION_SIZE: usize = 128;
     const SELECTION_RATIO: f64 = 0.7;
     const NUM_INDIVIDUALS_PER_PARENT: usize = 2;
-    const MUTATION_RATE: f64 = 0.01;
+    const MUTATION_RATE: f64 = 0.005;
     const REPLACE_RATIO: f64 = 0.7;
 
     let instart = s.blockstart;
