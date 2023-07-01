@@ -5,9 +5,10 @@ use log::{debug, log_enabled};
 
 use crate::{
     blocksplitter::{blocksplit, blocksplit_lz77},
+    cache::ZopfliLongestMatchCache,
     iter::ToFlagLastIterator,
     katajainen::length_limited_code_lengths,
-    lz77::{LitLen, Lz77Store, ZopfliBlockState},
+    lz77::{LitLen, Lz77Store},
     squeeze::{lz77_optimal, lz77_optimal_fixed},
     symbols::{
         get_dist_extra_bits, get_dist_extra_bits_value, get_dist_symbol,
@@ -203,9 +204,14 @@ fn deflate_part<W: Write>(
         }
         BlockType::Fixed => {
             let mut store = Lz77Store::new();
-            let mut s = ZopfliBlockState::new(options, instart, inend);
 
-            lz77_optimal_fixed(&mut s, in_data, instart, inend, &mut store);
+            lz77_optimal_fixed(
+                &mut ZopfliLongestMatchCache::new(inend - instart),
+                in_data,
+                instart,
+                inend,
+                &mut store,
+            );
             add_lz77_block(
                 btype,
                 final_block,
@@ -1032,7 +1038,6 @@ fn add_lz77_data<W: Write>(
 
 #[allow(clippy::too_many_arguments)] // Not feasible to refactor in a more readable way
 fn add_lz77_block_auto_type<W: Write>(
-    options: &Options,
     final_block: bool,
     in_data: &[u8],
     lz77: &Lz77Store,
@@ -1063,8 +1068,13 @@ fn add_lz77_block_auto_type<W: Write>(
         let instart = lz77.pos[lstart];
         let inend = instart + lz77.get_byte_range(lstart, lend);
 
-        let mut s = ZopfliBlockState::new(options, instart, inend);
-        lz77_optimal_fixed(&mut s, in_data, instart, inend, &mut fixedstore);
+        lz77_optimal_fixed(
+            &mut ZopfliLongestMatchCache::new(inend - instart),
+            in_data,
+            instart,
+            inend,
+            &mut fixedstore,
+        );
         fixedcost = calculate_block_size(&fixedstore, 0, fixedstore.size(), BlockType::Fixed);
     }
 
@@ -1134,18 +1144,16 @@ pub fn calculate_block_size_auto_type(lz77: &Lz77Store, lstart: usize, lend: usi
 fn add_all_blocks<W: Write>(
     splitpoints: &[usize],
     lz77: &Lz77Store,
-    options: &Options,
     final_block: bool,
     in_data: &[u8],
     bitwise_writer: &mut BitwiseWriter<W>,
 ) -> Result<(), Error> {
     let mut last = 0;
     for &item in splitpoints.iter() {
-        add_lz77_block_auto_type(options, false, in_data, lz77, last, item, 0, bitwise_writer)?;
+        add_lz77_block_auto_type(false, in_data, lz77, last, item, 0, bitwise_writer)?;
         last = item;
     }
     add_lz77_block_auto_type(
-        options,
         final_block,
         in_data,
         lz77,
@@ -1171,7 +1179,6 @@ fn blocksplit_attempt<W: Write>(
     let mut splitpoints_uncompressed = Vec::with_capacity(options.maximum_block_splits as usize);
 
     blocksplit(
-        options,
         in_data,
         instart,
         inend,
@@ -1183,9 +1190,8 @@ fn blocksplit_attempt<W: Write>(
 
     let mut last = instart;
     for &item in &splitpoints_uncompressed {
-        let s = ZopfliBlockState::new(options, last, item);
         let store = lz77_optimal(
-            &s,
+            &mut ZopfliLongestMatchCache::new(item - last),
             in_data,
             last,
             item,
@@ -1205,10 +1211,8 @@ fn blocksplit_attempt<W: Write>(
         last = item;
     }
 
-    let s = ZopfliBlockState::new(options, last, inend);
-
     let store = lz77_optimal(
-        &s,
+        &mut ZopfliLongestMatchCache::new(inend - last),
         in_data,
         last,
         inend,
@@ -1242,14 +1246,7 @@ fn blocksplit_attempt<W: Write>(
         }
     }
 
-    add_all_blocks(
-        &splitpoints,
-        &lz77,
-        options,
-        final_block,
-        in_data,
-        bitwise_writer,
-    )
+    add_all_blocks(&splitpoints, &lz77, final_block, in_data, bitwise_writer)
 }
 
 /// Since an uncompressed block can be max 65535 in size, it actually adds

@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use moka::sync::Cache as MokaCache;
 
 use crate::{
-    cache::{Cache, NoCache, ZopfliLongestMatchCache},
+    cache::Cache,
     hash::{Which, ZopfliHash},
     squeeze::SymbolTable,
     symbols::{get_dist_symbol, get_length_symbol},
@@ -13,7 +13,6 @@ use crate::{
         ZOPFLI_MAX_CHAIN_HITS, ZOPFLI_MAX_MATCH, ZOPFLI_MIN_MATCH, ZOPFLI_NUM_D, ZOPFLI_NUM_LL,
         ZOPFLI_WINDOW_MASK, ZOPFLI_WINDOW_SIZE,
     },
-    Options,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -139,13 +138,7 @@ impl Lz77Store {
     /// The result is placed in the Lz77Store.
     /// If instart is larger than 0, it uses values before instart as starting
     /// dictionary.
-    pub fn greedy<C: Cache>(
-        &mut self,
-        s: &ZopfliBlockState<C>,
-        in_data: &[u8],
-        instart: usize,
-        inend: usize,
-    ) {
+    pub fn greedy<C: Cache>(&mut self, lmc: &mut C, in_data: &[u8], instart: usize, inend: usize) {
         if instart == inend {
             return;
         }
@@ -172,8 +165,16 @@ impl Lz77Store {
         while i < inend {
             h.update(arr, i);
 
-            let longest_match =
-                find_longest_match(s, &mut h, arr, i, inend, ZOPFLI_MAX_MATCH, &mut None);
+            let longest_match = find_longest_match(
+                lmc,
+                &mut h,
+                arr,
+                i,
+                inend,
+                instart,
+                ZOPFLI_MAX_MATCH,
+                &mut None,
+            );
             dist = longest_match.distance;
             leng = longest_match.length;
             lengthscore = get_length_score(leng as i32, dist as i32);
@@ -242,7 +243,7 @@ impl Lz77Store {
         instart: usize,
         inend: usize,
         path: Vec<u16>,
-        s: &ZopfliBlockState<C>,
+        lmc: &mut C,
     ) {
         let windowstart = instart.saturating_sub(ZOPFLI_WINDOW_SIZE);
 
@@ -270,8 +271,16 @@ impl Lz77Store {
             if length >= ZOPFLI_MIN_MATCH as u16 {
                 // Get the distance by recalculating longest match. The found length
                 // should match the length from the path.
-                let longest_match =
-                    find_longest_match(s, &mut h, arr, pos, inend, length as usize, &mut None);
+                let longest_match = find_longest_match(
+                    lmc,
+                    &mut h,
+                    arr,
+                    pos,
+                    inend,
+                    instart,
+                    length as usize,
+                    &mut None,
+                );
                 let dist = longest_match.distance;
                 let dummy_length = longest_match.length;
                 debug_assert!(!(dummy_length != length && length > 2 && dummy_length > 2));
@@ -376,63 +385,6 @@ pub struct ZopfliOutput {
     pub cost: f64,
 }
 
-/// Some state information for compressing a block.
-/// This is currently a bit under-used (with mainly only the longest match cache),
-/// but is kept for easy future expansion.
-#[derive(Debug)]
-pub struct ZopfliBlockState<'a, C> {
-    pub options: &'a Options,
-    /* Cache for length/distance pairs found so far. */
-    lmc: Arc<Mutex<C>>,
-    /* The start (inclusive) and end (not inclusive) of the current block. */
-    pub blockstart: usize,
-    pub blockend: usize,
-    pub best: RwLock<Option<ZopfliOutput>>,
-    pub score_cache: Arc<MokaCache<SymbolTable, f64>>,
-}
-
-impl<'a, C> Clone for ZopfliBlockState<'a, C> {
-    fn clone(&self) -> Self {
-        ZopfliBlockState {
-            options: self.options,
-            data: self.data,
-            lmc: self.lmc.clone(),
-            blockstart: self.blockstart,
-            blockend: self.blockend,
-            best: RwLock::new(self.best.read().unwrap().clone()),
-            score_cache: self.score_cache.clone(),
-        }
-    }
-}
-
-impl<'a> ZopfliBlockState<'a, ZopfliLongestMatchCache> {
-    pub fn new(options: &'a Options, blockstart: usize, blockend: usize) -> Self {
-        ZopfliBlockState {
-            options,
-            blockstart,
-            blockend,
-            lmc: Arc::new(Mutex::new(ZopfliLongestMatchCache::new(
-                blockend - blockstart,
-            ))),
-            best: RwLock::new(None),
-            score_cache: Arc::new(MokaCache::new(16384)),
-        }
-    }
-}
-
-impl<'a> ZopfliBlockState<'a, NoCache> {
-    pub fn new_without_cache(options: &'a Options, blockstart: usize, blockend: usize) -> Self {
-        ZopfliBlockState {
-            options,
-            blockstart,
-            blockend,
-            lmc: Arc::new(Mutex::new(NoCache)),
-            best: RwLock::new(None),
-            score_cache: Arc::new(MokaCache::new(0)),
-        }
-    }
-}
-
 pub struct LongestMatch {
     pub distance: u16,
     pub length: u16,
@@ -476,17 +428,18 @@ const fn get_match(array: &[u8], scan_offset: usize, match_offset: usize, end: u
     scan_offset
 }
 
+#[warn(clippy::too_many_arguments)]
 pub fn find_longest_match<C: Cache>(
-    s: &ZopfliBlockState<C>,
+    lmc: &mut C,
     h: &mut ZopfliHash,
     array: &[u8],
     pos: usize,
     size: usize,
+    blockstart: usize,
     limit: usize,
     sublen: &mut Option<&mut [u16]>,
 ) -> LongestMatch {
-    let mut cache = s.lmc.lock().unwrap();
-    let mut longest_match = cache.try_get(pos, limit, sublen, s.blockstart);
+    let mut longest_match = lmc.try_get(pos, limit, sublen, blockstart);
 
     if longest_match.from_cache {
         debug_assert!(pos + (longest_match.length as usize) <= size);
@@ -515,8 +468,8 @@ pub fn find_longest_match<C: Cache>(
 
     let (bestdist, bestlength) = find_longest_match_loop(h, array, pos, size, limit, sublen);
 
-    cache.store(pos, limit, sublen, bestdist, bestlength, s.blockstart);
-    drop(cache);
+    lmc.store(pos, limit, sublen, bestdist, bestlength, blockstart);
+
     debug_assert!(bestlength <= limit as u16);
 
     debug_assert!(pos + bestlength as usize <= size);

@@ -35,7 +35,7 @@ use crate::{
     cache::Cache,
     deflate::{calculate_block_size, BlockType},
     hash::ZopfliHash,
-    lz77::{find_longest_match, LitLen, Lz77Store, ZopfliBlockState, ZopfliOutput},
+    lz77::{find_longest_match, LitLen, Lz77Store, ZopfliOutput},
     symbols::{get_dist_extra_bits, get_dist_symbol, get_length_extra_bits, get_length_symbol},
     util::{ZOPFLI_MAX_MATCH, ZOPFLI_NUM_D, ZOPFLI_NUM_LL, ZOPFLI_WINDOW_MASK, ZOPFLI_WINDOW_SIZE},
 };
@@ -216,7 +216,7 @@ fn get_cost_model_min_cost<F: Fn(usize, u16) -> f64>(costmodel: F) -> f64 {
 ///     length to reach this byte from a previous byte.
 /// returns the cost that was, according to the `costmodel`, needed to get to the end.
 fn get_best_lengths<F: Fn(usize, u16) -> f64, C: Cache>(
-    s: &ZopfliBlockState<C>,
+    lmc: &mut C,
     in_data: &[u8],
     instart: usize,
     inend: usize,
@@ -271,11 +271,12 @@ fn get_best_lengths<F: Fn(usize, u16) -> f64, C: Cache>(
         }
 
         longest_match = find_longest_match(
-            s,
+            lmc,
             h,
             arr,
             i,
             inend,
+            instart,
             ZOPFLI_MAX_MATCH,
             &mut Some(&mut sublen),
         );
@@ -353,7 +354,7 @@ fn trace(size: usize, length_array: &[u16]) -> Vec<u16> {
 ///     This is not the actual cost.
 #[allow(clippy::too_many_arguments)] // Not feasible to refactor in a more readable way
 fn lz77_optimal_run<F: Fn(usize, u16) -> f64, C: Cache>(
-    s: &ZopfliBlockState<C>,
+    lmc: &mut C,
     in_data: &[u8],
     instart: usize,
     inend: usize,
@@ -361,9 +362,9 @@ fn lz77_optimal_run<F: Fn(usize, u16) -> f64, C: Cache>(
     store: &mut Lz77Store,
     h: &mut ZopfliHash,
 ) {
-    let (cost, length_array) = get_best_lengths(s, in_data, instart, inend, costmodel, h);
+    let (cost, length_array) = get_best_lengths(lmc, in_data, instart, inend, costmodel, h);
     let path = trace(inend - instart, &length_array);
-    store.follow_path(in_data, instart, inend, path, s);
+    store.follow_path(in_data, instart, inend, path, lmc);
     debug_assert!(cost < f64::INFINITY);
 }
 
@@ -376,18 +377,16 @@ fn lz77_optimal_run<F: Fn(usize, u16) -> f64, C: Cache>(
 /// If `instart` is larger than `0`, it uses values before `instart` as starting
 /// dictionary.
 pub fn lz77_optimal_fixed<C: Cache>(
-    s: &mut ZopfliBlockState<C>,
+    lmc: &mut C,
     in_data: &[u8],
     instart: usize,
     inend: usize,
     store: &mut Lz77Store,
 ) {
-    s.blockstart = instart;
-    s.blockend = inend;
     let mut h = ZopfliHash::new();
     let mut costs = Vec::with_capacity(inend - instart);
     lz77_optimal_run(
-        s,
+        lmc,
         in_data,
         instart,
         inend,
@@ -765,7 +764,7 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
 /// If `instart` is larger than 0, it uses values before `instart` as starting
 /// dictionary.
 pub fn lz77_optimal<C: Cache>(
-    s: &ZopfliBlockState<C>,
+    lmc: &mut C,
     in_data: &[u8],
     instart: usize,
     inend: usize,
@@ -784,7 +783,7 @@ pub fn lz77_optimal<C: Cache>(
     let mut outputstore = Lz77Store::new();
 
     /* Initial run. */
-    outputstore.greedy(s, in_data, instart, inend);
+    outputstore.greedy(lmc, in_data, instart, inend);
     let mut greedy_stats = SymbolStats::default();
     greedy_stats.get_statistics(&outputstore);
     let max_litlen_freq = *greedy_stats.table.litlens.iter().max().unwrap() + 1;
