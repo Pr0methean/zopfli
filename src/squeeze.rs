@@ -764,8 +764,8 @@ pub fn lz77_optimal<C: Cache>(
     outputstore.greedy(s, in_data, instart, inend);
     let mut greedy_stats = SymbolStats::default();
     greedy_stats.get_statistics(&outputstore);
-    let max_litlen_freq = *greedy_stats.table.litlens.iter().max().unwrap();
-    let max_dist_freq = *greedy_stats.table.dists.iter().max().unwrap();
+    let max_litlen_freq = *greedy_stats.table.litlens.iter().max().unwrap() + 1;
+    let max_dist_freq = *greedy_stats.table.dists.iter().max().unwrap() + 1;
     let genome_builder = SymbolTableBuilder {
         max_dist_freq,
         max_litlen_freq,
