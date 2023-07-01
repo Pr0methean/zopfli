@@ -777,10 +777,7 @@ pub fn lz77_optimal<C: Cache>(
         .uniform_at_random();
     let algorithm = genetic_algorithm()
         .with_evaluation(s)
-        .with_selection(MaximizeSelector::new(
-            SELECTION_RATIO,
-            NUM_INDIVIDUALS_PER_PARENT,
-        ))
+        .with_selection(MaximizeSelector::new(SELECTION_RATIO, NUM_INDIVIDUALS_PER_PARENT))
         .with_crossover(SymbolTableCrossBreeder::default())
         .with_mutation(SymbolTableMutator {
             mutation_chance_distro: Bernoulli::new(MUTATION_RATE).unwrap(),
@@ -805,10 +802,9 @@ pub fn lz77_optimal<C: Cache>(
                     let evaluated_population = step.result.evaluated_population;
                     prev_best = best_solution.solution.fitness.0 .0;
                     debug!(
-                        "step: generation: {}, population: {}, average_fitness: {}, \
+                        "step: generation: {}, average_fitness: {}, \
                          best fitness: {}, duration: {}, processing_time: {}",
                         step.iteration,
-                        evaluated_population.individuals().len(),
                         evaluated_population.average_fitness(),
                         best_solution.solution.fitness,
                         step.duration,
@@ -818,10 +814,9 @@ pub fn lz77_optimal<C: Cache>(
             }
             Ok(SimResult::Final(step, processing_time, duration, stop_reason)) => {
                 debug!(
-                    "final result: generation: {}, population: {}, \
+                    "final result: generation: {},\
                          best fitness: {}, duration: {}, processing_time: {}, stop_reason: {}",
                     step.iteration,
-                    step.result.evaluated_population.individuals().len(),
                     step.result.best_solution.solution.fitness,
                     duration,
                     processing_time,
