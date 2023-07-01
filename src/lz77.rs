@@ -382,7 +382,6 @@ pub struct ZopfliOutput {
 #[derive(Debug)]
 pub struct ZopfliBlockState<'a, C> {
     pub options: &'a Options,
-    pub data: &'a [u8],
     /* Cache for length/distance pairs found so far. */
     lmc: Arc<Mutex<C>>,
     /* The start (inclusive) and end (not inclusive) of the current block. */
@@ -407,10 +406,9 @@ impl<'a, C> Clone for ZopfliBlockState<'a, C> {
 }
 
 impl<'a> ZopfliBlockState<'a, ZopfliLongestMatchCache> {
-    pub fn new(options: &'a Options, data: &'a [u8], blockstart: usize, blockend: usize) -> Self {
+    pub fn new(options: &'a Options, blockstart: usize, blockend: usize) -> Self {
         ZopfliBlockState {
             options,
-            data,
             blockstart,
             blockend,
             lmc: Arc::new(Mutex::new(ZopfliLongestMatchCache::new(
@@ -423,15 +421,9 @@ impl<'a> ZopfliBlockState<'a, ZopfliLongestMatchCache> {
 }
 
 impl<'a> ZopfliBlockState<'a, NoCache> {
-    pub fn new_without_cache(
-        options: &'a Options,
-        data: &'a [u8],
-        blockstart: usize,
-        blockend: usize,
-    ) -> Self {
+    pub fn new_without_cache(options: &'a Options, blockstart: usize, blockend: usize) -> Self {
         ZopfliBlockState {
             options,
-            data,
             blockstart,
             blockend,
             lmc: Arc::new(Mutex::new(NoCache)),
