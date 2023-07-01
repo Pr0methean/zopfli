@@ -721,7 +721,7 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
         if num_parents < 2 {
             return vec![];
         }
-        let mut children = Vec::with_capacity(num_parents * (num_parents + 1) * 8);
+        let mut children = Vec::with_capacity(num_parents * (num_parents + 1) * 7);
         for first_parent_index in 0..num_parents - 1 {
             let first_parent = &parents[first_parent_index];
             for second_parent_index in first_parent_index + 1..num_parents {
@@ -735,12 +735,14 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
                     generate_child_chromosomes(first_parent.litlens, second_parent.litlens, rng);
                 let dists =
                     generate_child_chromosomes(first_parent.dists, second_parent.dists, rng);
-                for litlen in litlens.into_iter() {
-                    for dist in dists.iter() {
-                        children.push(SymbolTable {
-                            litlens: litlen,
-                            dists: *dist,
-                        });
+                for (i, litlens) in litlens.into_iter().enumerate() {
+                    for (j, dists) in dists.iter().enumerate() {
+                        if !(i == 0 && j == 0) && !(i == 1 && j == 1) {
+                            children.push(SymbolTable {
+                                litlens,
+                                dists: *dists,
+                            });
+                        }
                     }
                 }
             }
