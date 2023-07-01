@@ -1,6 +1,7 @@
 use alloc::vec::Vec;
 use core::cmp;
 use std::sync::{Arc, Mutex, RwLock};
+use moka::sync::Cache as MokaCache;
 
 use crate::{
     cache::{Cache, NoCache, ZopfliLongestMatchCache},
@@ -387,6 +388,7 @@ pub struct ZopfliBlockState<'a, C> {
     pub blockstart: usize,
     pub blockend: usize,
     pub best: RwLock<Option<ZopfliOutput>>,
+    pub score_cache: Arc<MokaCache<SymbolTable, f64>>,
 }
 
 impl<'a, C> Clone for ZopfliBlockState<'a, C> {
@@ -398,6 +400,7 @@ impl<'a, C> Clone for ZopfliBlockState<'a, C> {
             blockstart: self.blockstart,
             blockend: self.blockend,
             best: RwLock::new(self.best.read().unwrap().clone()),
+            score_cache: self.score_cache.clone(),
         }
     }
 }
@@ -413,6 +416,7 @@ impl<'a> ZopfliBlockState<'a, ZopfliLongestMatchCache> {
                 blockend - blockstart,
             ))),
             best: RwLock::new(None),
+            score_cache: Arc::new(MokaCache::new(16384)),
         }
     }
 }
@@ -431,6 +435,7 @@ impl<'a> ZopfliBlockState<'a, NoCache> {
             blockend,
             lmc: Arc::new(Mutex::new(NoCache)),
             best: RwLock::new(None),
+            score_cache: Arc::new(MokaCache::new(0))
         }
     }
 }

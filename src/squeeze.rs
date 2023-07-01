@@ -513,51 +513,53 @@ where
     C: Cache,
 {
     fn fitness_of(&self, a: &SymbolTable) -> FloatAsFitness {
-        let read_best = self.best.read().unwrap();
-        let best_before = match read_best.deref() {
-            None => f64::INFINITY,
-            Some(output) => {
-                if output.stats == *a {
-                    return (-output.cost).into();
+        self.score_cache.get_with(*a, || {
+            let read_best = self.best.read().unwrap();
+            let best_before = match read_best.deref() {
+                None => f64::INFINITY,
+                Some(output) => {
+                    if output.stats == *a {
+                        return (-output.cost).into();
+                    }
+                    output.cost
                 }
-                output.cost
-            }
-        };
-        drop(read_best);
-        let stats = SymbolStats::from(*a);
-        let pool = &*LZ77_STORE_POOL;
-        let mut currentstore = pool.pull();
-        let mut h = ZopfliHash::new();
-        lz77_optimal_run(
-            self,
-            |a, b| get_cost_stat(a, b, &stats),
-            currentstore.deref_mut(),
-            &mut h,
-        );
-        let cost = calculate_block_size(&currentstore, 0, currentstore.size(), BlockType::Dynamic);
-        if cost < best_before {
-            let mut best = self.best.write().unwrap();
-            let best = best.deref_mut();
-            match best {
-                None => {
-                    *best = Some(ZopfliOutput {
-                        stored: currentstore.clone(),
-                        stats: stats.table,
-                        cost,
-                    })
-                }
-                Some(best_after) => {
-                    if cost < best_after.cost {
-                        *best_after = ZopfliOutput {
+            };
+            drop(read_best);
+            let stats = SymbolStats::from(*a);
+            let pool = &*LZ77_STORE_POOL;
+            let mut currentstore = pool.pull();
+            let mut h = ZopfliHash::new();
+            lz77_optimal_run(
+                self,
+                |a, b| get_cost_stat(a, b, &stats),
+                currentstore.deref_mut(),
+                &mut h,
+            );
+            let cost = calculate_block_size(&currentstore, 0, currentstore.size(), BlockType::Dynamic);
+            if cost < best_before {
+                let mut best = self.best.write().unwrap();
+                let best = best.deref_mut();
+                match best {
+                    None => {
+                        *best = Some(ZopfliOutput {
                             stored: currentstore.clone(),
                             stats: stats.table,
                             cost,
-                        };
+                        })
+                    }
+                    Some(best_after) => {
+                        if cost < best_after.cost {
+                            *best_after = ZopfliOutput {
+                                stored: currentstore.clone(),
+                                stats: stats.table,
+                                cost,
+                            };
+                        }
                     }
                 }
             }
-        }
-        (-cost).into()
+            -cost
+        }).into()
     }
 
     fn average(&self, a: &[FloatAsFitness]) -> FloatAsFitness {
@@ -785,8 +787,8 @@ pub fn lz77_optimal<C: Cache>(
             max_iterations,
         ))
         .build();
+    let mut prev_best = f64::NEG_INFINITY;
     loop {
-        let mut prev_best = f64::NEG_INFINITY;
         match genetic_algorithm_sim.step() {
             Ok(SimResult::Intermediate(step)) => {
                 let best_solution = step.result.best_solution;
