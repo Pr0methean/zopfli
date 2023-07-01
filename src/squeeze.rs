@@ -428,16 +428,13 @@ where
     where
         R: Rng + Sized,
     {
-        let mut changed = false;
-        while !changed {
-            genome
-                .litlens
-                .iter_mut()
-                .enumerate()
-                .for_each(|(index, litlen)| {
+        genome.litlens
+            .iter_mut()
+            .enumerate()
+            .for_each(|(index, litlen)| {
                     if index != 256 {
                         // don't mutate the end symbol
-                        changed |= mutate_single_usize(
+                        mutate_single_usize(
                             &self.mutation_chance_distro,
                             0,
                             self.max_litlen_freq,
@@ -446,16 +443,15 @@ where
                         );
                     }
                 });
-            genome.dists.iter_mut().for_each(|dist| {
-                changed |= mutate_single_usize(
-                    &self.mutation_chance_distro,
-                    0,
-                    self.max_dist_freq,
-                    rng,
-                    dist,
-                );
-            });
-        }
+        genome.dists.iter_mut().for_each(|dist| {
+            mutate_single_usize(
+                &self.mutation_chance_distro,
+                0,
+                self.max_dist_freq,
+                rng,
+                dist,
+            );
+        });
         genome
     }
 }
@@ -612,8 +608,6 @@ where
 #[derive(Debug)]
 pub struct SymbolTableBuilder {
     first_guess: SymbolTable,
-    max_litlen_freq: usize,
-    max_dist_freq: usize,
 }
 
 impl GenomeBuilder<SymbolTable> for SymbolTableBuilder {
@@ -727,7 +721,7 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
         if num_parents < 2 {
             return vec![];
         }
-        let mut children = Vec::with_capacity(num_parents * (num_parents + 1) * 7);
+        let mut children = Vec::with_capacity(num_parents * (num_parents + 1) * 8);
         for first_parent_index in 0..num_parents - 1 {
             let first_parent = &parents[first_parent_index];
             for second_parent_index in first_parent_index + 1..num_parents {
@@ -741,20 +735,16 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
                     generate_child_chromosomes(first_parent.litlens, second_parent.litlens, rng);
                 let dists =
                     generate_child_chromosomes(first_parent.dists, second_parent.dists, rng);
-                for (i, litlens) in litlens.into_iter().enumerate() {
-                    for (j, dists) in dists.iter().enumerate() {
-                        if !(i == 0 && j == 0) && !(i == 1 && j == 1) {
-                            children.push(SymbolTable {
-                                litlens,
-                                dists: *dists,
-                            });
-                        }
+                for litlen in litlens.into_iter() {
+                    for dist in dists.iter() {
+                        children.push(SymbolTable {
+                            litlens: litlen,
+                            dists: *dist,
+                        });
                     }
                 }
             }
         }
-        children.sort();
-        children.dedup();
         children
     }
 }
@@ -787,8 +777,6 @@ pub fn lz77_optimal<C: Cache>(
     let max_litlen_freq = *greedy_stats.table.litlens.iter().max().unwrap() + 1;
     let max_dist_freq = *greedy_stats.table.dists.iter().max().unwrap() + 1;
     let genome_builder = SymbolTableBuilder {
-        max_dist_freq,
-        max_litlen_freq,
         first_guess: greedy_stats.table,
     };
     let initial_population = build_population()
