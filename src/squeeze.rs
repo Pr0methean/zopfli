@@ -766,7 +766,7 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
 /// If `instart` is larger than 0, it uses values before `instart` as starting
 /// dictionary.
 pub fn lz77_optimal<C: Cache>(
-    s: &ZopfliBlockState<C>,
+    s: ZopfliBlockState<C>,
     in_data: &[u8],
     max_iterations: Option<u64>,
     max_iterations_without_improvement: Option<u64>,
@@ -799,7 +799,7 @@ pub fn lz77_optimal<C: Cache>(
         .of_size(POPULATION_SIZE)
         .uniform_at_random();
     let algorithm = genetic_algorithm()
-        .with_evaluation(s)
+        .with_evaluation(&s)
         .with_selection(MaximizeSelector::new(SELECTION_RATIO, NUM_INDIVIDUALS_PER_PARENT))
         .with_crossover(SymbolTableCrossBreeder::default())
         .with_mutation(SymbolTableMutator {
@@ -807,7 +807,7 @@ pub fn lz77_optimal<C: Cache>(
             max_litlen_freq,
             max_dist_freq,
         })
-        .with_reinsertion(ElitistReinserter::new(s, false, REPLACE_RATIO))
+        .with_reinsertion(ElitistReinserter::new(&s, false, REPLACE_RATIO))
         .with_initial_population(initial_population)
         .build();
     let mut genetic_algorithm_sim = simulate(algorithm)
@@ -846,8 +846,7 @@ pub fn lz77_optimal<C: Cache>(
                     processing_time,
                     stop_reason
                 );
-                let best = s.best.read().unwrap();
-                return best.clone().unwrap().stored;
+                return s.best.into_inner().unwrap().unwrap().stored;
             }
             Err(e) => panic!("{:?}", e),
         }

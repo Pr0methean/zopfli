@@ -1193,7 +1193,7 @@ fn blocksplit_attempt<W: Write>(
     for &item in &splitpoints_uncompressed {
         let s = ZopfliBlockState::new(options, in_data, last, item);
         let store = lz77_optimal(
-            &s,
+            s,
             in_data,
             options.iteration_count.map(NonZeroU64::get),
             options.iterations_without_improvement.map(NonZeroU64::get),
@@ -1214,7 +1214,7 @@ fn blocksplit_attempt<W: Write>(
     let s = ZopfliBlockState::new(options, in_data, last, inend);
 
     let store = lz77_optimal(
-        &s,
+        s,
         in_data,
         options.iteration_count.map(NonZeroU64::get),
         options.iterations_without_improvement.map(NonZeroU64::get),
