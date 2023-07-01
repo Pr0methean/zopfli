@@ -786,6 +786,7 @@ pub fn lz77_optimal<C: Cache>(
     outputstore.greedy(s.lmc.lock().unwrap().deref_mut(), in_data, instart, inend);
     let mut greedy_stats = SymbolStats::default();
     greedy_stats.get_statistics(&outputstore);
+    debug!("Initial symbol table: {:?}", greedy_stats.table);
     let max_litlen_freq = *greedy_stats.table.litlens.iter().max().unwrap() + 1;
     let max_dist_freq = *greedy_stats.table.dists.iter().max().unwrap() + 1;
     let genome_builder = SymbolTableBuilder {
@@ -825,9 +826,10 @@ pub fn lz77_optimal<C: Cache>(
                     prev_best = best_solution.solution.fitness.0 .0;
                     debug!(
                         "step: generation: {}, average_fitness: {}, \
-                         best fitness: {}, duration: {}, processing_time: {}",
+                         best solution: {:?}, fitness: {}, duration: {}, processing_time: {}",
                         step.iteration,
                         evaluated_population.average_fitness(),
+                        best_solution.solution.genome,
                         best_solution.solution.fitness,
                         step.duration,
                         step.processing_time,
