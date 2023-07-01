@@ -39,6 +39,7 @@ use crate::{
     symbols::{get_dist_extra_bits, get_dist_symbol, get_length_extra_bits, get_length_symbol},
     util::{ZOPFLI_MAX_MATCH, ZOPFLI_NUM_D, ZOPFLI_NUM_LL, ZOPFLI_WINDOW_MASK, ZOPFLI_WINDOW_SIZE},
 };
+use crate::lz77::ZopfliBlockState;
 
 const K_INV_LOG2: f64 = core::f64::consts::LOG2_E; // 1.0 / log(2.0)
 
@@ -384,7 +385,6 @@ pub fn lz77_optimal_fixed<C: Cache>(
     store: &mut Lz77Store,
 ) {
     let mut h = ZopfliHash::new();
-    let mut costs = Vec::with_capacity(inend - instart);
     lz77_optimal_run(
         lmc,
         in_data,
@@ -393,7 +393,6 @@ pub fn lz77_optimal_fixed<C: Cache>(
         get_cost_fixed,
         store,
         &mut h,
-        &mut costs,
     );
 }
 
@@ -557,7 +556,10 @@ where
                 let mut currentstore = pool.pull();
                 let mut h = ZopfliHash::new();
                 lz77_optimal_run(
-                    self,
+                    self.lmc.lock().unwrap().deref_mut(),
+                    self.data,
+                    self.blockstart,
+                    self.blockend,
                     |a, b| get_cost_stat(a, b, &stats),
                     currentstore.deref_mut(),
                     &mut h,
@@ -764,10 +766,8 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
 /// If `instart` is larger than 0, it uses values before `instart` as starting
 /// dictionary.
 pub fn lz77_optimal<C: Cache>(
-    lmc: &mut C,
+    s: &ZopfliBlockState<C>,
     in_data: &[u8],
-    instart: usize,
-    inend: usize,
     max_iterations: Option<u64>,
     max_iterations_without_improvement: Option<u64>,
 ) -> Lz77Store {
@@ -783,7 +783,7 @@ pub fn lz77_optimal<C: Cache>(
     let mut outputstore = Lz77Store::new();
 
     /* Initial run. */
-    outputstore.greedy(lmc, in_data, instart, inend);
+    outputstore.greedy(s.lmc.lock().unwrap().deref_mut(), in_data, instart, inend);
     let mut greedy_stats = SymbolStats::default();
     greedy_stats.get_statistics(&outputstore);
     let max_litlen_freq = *greedy_stats.table.litlens.iter().max().unwrap() + 1;

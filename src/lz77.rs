@@ -4,16 +4,11 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use moka::sync::Cache as MokaCache;
 
-use crate::{
-    cache::Cache,
-    hash::{Which, ZopfliHash},
-    squeeze::SymbolTable,
-    symbols::{get_dist_symbol, get_length_symbol},
-    util::{
-        ZOPFLI_MAX_CHAIN_HITS, ZOPFLI_MAX_MATCH, ZOPFLI_MIN_MATCH, ZOPFLI_NUM_D, ZOPFLI_NUM_LL,
-        ZOPFLI_WINDOW_MASK, ZOPFLI_WINDOW_SIZE,
-    },
-};
+use crate::{cache::Cache, hash::{Which, ZopfliHash}, Options, squeeze::SymbolTable, symbols::{get_dist_symbol, get_length_symbol}, util::{
+    ZOPFLI_MAX_CHAIN_HITS, ZOPFLI_MAX_MATCH, ZOPFLI_MIN_MATCH, ZOPFLI_NUM_D, ZOPFLI_NUM_LL,
+    ZOPFLI_WINDOW_MASK, ZOPFLI_WINDOW_SIZE,
+}};
+use crate::cache::{NoCache, ZopfliLongestMatchCache};
 
 #[derive(Clone, Copy, Debug)]
 pub enum LitLen {
@@ -383,6 +378,71 @@ pub struct ZopfliOutput {
     pub stored: Lz77Store,
     pub stats: SymbolTable,
     pub cost: f64,
+}
+
+/// Some state information for compressing a block.
+/// This is currently a bit under-used (with mainly only the longest match cache),
+/// but is kept for easy future expansion.
+#[derive(Debug)]
+pub struct ZopfliBlockState<'a, C> {
+    pub options: &'a Options,
+    pub data: &'a [u8],
+    /* Cache for length/distance pairs found so far. */
+    pub lmc: Arc<Mutex<C>>,
+    /* The start (inclusive) and end (not inclusive) of the current block. */
+    pub blockstart: usize,
+    pub blockend: usize,
+    pub best: RwLock<Option<ZopfliOutput>>,
+    pub score_cache: Arc<MokaCache<SymbolTable, f64>>,
+}
+
+impl<'a, C> Clone for ZopfliBlockState<'a, C> {
+    fn clone(&self) -> Self {
+        ZopfliBlockState {
+            options: self.options,
+            data: self.data,
+            lmc: self.lmc.clone(),
+            blockstart: self.blockstart,
+            blockend: self.blockend,
+            best: RwLock::new(self.best.read().unwrap().clone()),
+            score_cache: self.score_cache.clone(),
+        }
+    }
+}
+
+impl<'a> ZopfliBlockState<'a, ZopfliLongestMatchCache> {
+    pub fn new(options: &'a Options, data: &'a [u8], blockstart: usize, blockend: usize) -> Self {
+        ZopfliBlockState {
+            options,
+            data,
+            blockstart,
+            blockend,
+            lmc: Arc::new(Mutex::new(ZopfliLongestMatchCache::new(
+                blockend - blockstart,
+            ))),
+            best: RwLock::new(None),
+            score_cache: Arc::new(MokaCache::new(16384)),
+        }
+    }
+}
+
+impl<'a> ZopfliBlockState<'a, NoCache> {
+    pub fn new_without_cache(
+        options: &'a Options,
+        data: &'a [u8],
+        blockstart: usize,
+        blockend: usize,
+    ) -> Self {
+        ZopfliBlockState {
+            options,
+            data,
+            blockstart,
+            blockend,
+            lmc: Arc::new(Mutex::new(NoCache)),
+            best: RwLock::new(None),
+            score_cache: Arc::new(MokaCache::new(0)),
+        }
+    }
 }
 
 pub struct LongestMatch {
