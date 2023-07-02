@@ -174,8 +174,8 @@ impl SymbolStats {
     }
 
     fn clear_freqs(&mut self) {
-        self.litlens = [0; ZOPFLI_NUM_LL];
-        self.dists = [0; ZOPFLI_NUM_D];
+        self.table.litlens = [0; ZOPFLI_NUM_LL];
+        self.table.dists = [0; ZOPFLI_NUM_D];
     }
 }
 
