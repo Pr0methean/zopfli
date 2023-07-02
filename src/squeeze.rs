@@ -172,6 +172,30 @@ impl SymbolStats {
 
         self.calculate_entropy();
     }
+
+    fn clear_freqs(&mut self) {
+        self.litlens = [0; ZOPFLI_NUM_LL];
+        self.dists = [0; ZOPFLI_NUM_D];
+    }
+}
+
+fn add_weighed_stat_freqs(
+    stats1: &SymbolStats,
+    w1: f64,
+    stats2: &SymbolStats,
+    w2: f64,
+) -> SymbolStats {
+    let mut result = SymbolStats::default();
+
+    for i in 0..ZOPFLI_NUM_LL {
+        result.table.litlens[i] =
+            (stats1.table.litlens[i] as f64 * w1 + stats2.table.litlens[i] as f64 * w2) as usize;
+    }
+    for i in 0..ZOPFLI_NUM_D {
+        result.table.dists[i] = (stats1.table.dists[i] as f64 * w1 + stats2.table.dists[i] as f64 * w2) as usize;
+    }
+    result.table.litlens[256] = 1; // End symbol.
+    result
 }
 
 /// Finds the minimum possible cost this cost model can return for valid length and
