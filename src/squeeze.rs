@@ -619,7 +619,11 @@ impl GenomeBuilder<SymbolTable> for SymbolTableBuilder {
     {
         match index {
             0 => self.first_guess,
-            1 => SymbolTable::default(),
+            1 => {
+                let mut table = SymbolTable::default();
+                table.litlens[256] = 1; // end symbol
+                table
+            },
             _ => {
                 if index % 2 == 0 {
                     let mut table = SymbolTable::default();
