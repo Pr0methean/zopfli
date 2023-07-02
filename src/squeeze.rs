@@ -644,6 +644,15 @@ impl GenomeBuilder<SymbolTable> for SymbolTableBuilder {
                 table.litlens[256] = 1; // end symbol
                 table
             }
+            2 => {
+                let mut table = self.first_guess;
+                table.litlens.sort();
+                table.litlens.reverse();
+                table.litlens[256] = 1; // end symbol
+                table.dists.sort();
+                table.dists.reverse();
+                table
+            }
             _ => {
                 if index % 4 != 0 {
                     let mut table = SymbolTable::default();
