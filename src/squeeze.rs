@@ -744,12 +744,12 @@ where
     if parent0 == parent1 {
         smallvec![parent0]
     } else {
-        let cut_point = rng.gen_range(1..N as i32) as usize;
+        let cut_point = rng.gen_range(0..=N as i32) as usize;
         let mut hybrid_0 = parent0;
         hybrid_0[cut_point..].copy_from_slice(&parent1[cut_point..]);
         let mut hybrid_1 = parent1;
         hybrid_1[cut_point..].copy_from_slice(&parent0[cut_point..]);
-        smallvec![parent0, parent1, hybrid_0, hybrid_1]
+        smallvec![hybrid_0, hybrid_1]
     }
 }
 
@@ -762,7 +762,7 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
         if num_parents < 2 {
             return vec![];
         }
-        let mut children = Vec::with_capacity(num_parents * (num_parents + 1) * 7);
+        let mut children = Vec::with_capacity(num_parents * (num_parents - 1) * 3);
         for first_parent_index in 0..num_parents - 1 {
             let first_parent = &parents[first_parent_index];
             for second_parent_index in first_parent_index + 1..num_parents {
@@ -775,9 +775,9 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
                 let litlens =
                     generate_child_chromosomes(first_parent.litlens, second_parent.litlens, rng);
                 let dists =
-                    generate_child_chromosomes(first_parent.dists, second_parent.dists, rng);
-                for (i, litlens) in litlens.into_iter().enumerate() {
-                    for (j, dists) in dists.iter().enumerate() {
+                    generate_child_chromosomes(second_parent.dists, first_parent.dists, rng);
+                for litlens in litlens.into_iter() {
+                    for dists in dists.iter() {
                         if !(i == 0 && j == 0) && !(i == 1 && j == 1) {
                             children.push(SymbolTable {
                                 litlens,
@@ -786,6 +786,14 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
                         }
                     }
                 }
+                children.push(SymbolTable {
+                        litlens: first_parent.litlens,
+                        dists: second_parent.dists
+                    });
+                children.push(SymbolTable {
+                    litlens: second_parent.litlens,
+                    dists: first_parent.dists
+                });
             }
         }
         children
