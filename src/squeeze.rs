@@ -617,25 +617,28 @@ impl GenomeBuilder<SymbolTable> for SymbolTableBuilder {
     where
         R: Rng + Sized,
     {
-        if index == 0 {
-            return self.first_guess;
-        }
-        if index % 2 == 0 {
-            let mut table = SymbolTable::default();
-            for litlen in table.litlens.iter_mut() {
-                *litlen = rng.gen_range(0..=self.max_litlen_freq);
+        match index {
+            0 => self.first_guess,
+            1 => SymbolTable::default(),
+            _ => {
+                if index % 2 == 0 {
+                    let mut table = SymbolTable::default();
+                    for litlen in table.litlens.iter_mut() {
+                        *litlen = rng.gen_range(0..=self.max_litlen_freq);
+                    }
+                    table.litlens[256] = 1; // end symbol
+                    for dist in table.dists.iter_mut() {
+                        *dist = rng.gen_range(0..=self.max_dist_freq);
+                    }
+                    table
+                } else {
+                    let mut table = self.first_guess;
+                    table.litlens.shuffle(rng);
+                    table.litlens[256] = 1; // end symbol
+                    table.dists.shuffle(rng);
+                    table
+                }
             }
-            table.litlens[256] = 1; // end symbol
-            for dist in table.dists.iter_mut() {
-                *dist = rng.gen_range(0..=self.max_dist_freq);
-            }
-            table
-        } else {
-            let mut table = self.first_guess;
-            table.litlens.shuffle(rng);
-            table.litlens[256] = 1; // end symbol
-            table.dists.shuffle(rng);
-            table
         }
     }
 }
