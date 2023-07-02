@@ -649,14 +649,19 @@ impl GenomeBuilder<SymbolTable> for SymbolTableBuilder {
                 table.litlens.sort();
                 table.litlens.reverse();
                 table.litlens[256] = 1; // end symbol
-                let mut sorted_dists = table.dists.clone();
-                sorted_dists.sort_unstable();
-                sorted_dists.reverse();
-                let mut sorted_dists = sorted_dists.into_iter();
-                for dist in table.dists.iter_mut() {
-                    if *dist != 0 {
-                        *dist = sorted_dists.next().unwrap();
+                if self.max_dist_freq > 1 {
+                    let mut sorted_dists = table.dists.clone();
+                    sorted_dists.sort_unstable();
+                    sorted_dists.reverse();
+                    let mut sorted_dists = sorted_dists.into_iter();
+                    for dist in table.dists.iter_mut() {
+                        if *dist != 0 {
+                            *dist = sorted_dists.next().unwrap();
+                        }
                     }
+                } else {
+                    table.dists.sort();
+                    table.dists.reverse();
                 }
                 table
             }
