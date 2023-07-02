@@ -901,6 +901,7 @@ pub fn lz77_optimal<C: Cache>(
                         &mut best_after_ga,
                     );
                 }
+                debug!("Block finished");
                 return best_after_ga;
             }
             Err(e) => panic!("{:?}", e),
