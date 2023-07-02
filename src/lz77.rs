@@ -6,7 +6,7 @@ use moka::sync::Cache as MokaCache;
 
 use crate::{
     cache::{Cache, NoCache, ZopfliLongestMatchCache},
-    hash::{Which, ZopfliHash},
+    hash::{Which, ZopfliHash, HASH_POOL},
     squeeze::SymbolTable,
     symbols::{get_dist_symbol, get_length_symbol},
     util::{
@@ -15,7 +15,6 @@ use crate::{
     },
     Options,
 };
-use crate::hash::HASH_POOL;
 
 #[derive(Clone, Copy, Debug)]
 pub enum LitLen {

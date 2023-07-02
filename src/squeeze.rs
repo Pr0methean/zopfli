@@ -38,12 +38,11 @@ use smallvec::{smallvec, SmallVec};
 use crate::{
     cache::Cache,
     deflate::{calculate_block_size, BlockType},
-    hash::ZopfliHash,
+    hash::{ZopfliHash, HASH_POOL},
     lz77::{find_longest_match, LitLen, Lz77Store, ZopfliBlockState, ZopfliOutput},
     symbols::{get_dist_extra_bits, get_dist_symbol, get_length_extra_bits, get_length_symbol},
     util::{ZOPFLI_MAX_MATCH, ZOPFLI_NUM_D, ZOPFLI_NUM_LL, ZOPFLI_WINDOW_MASK, ZOPFLI_WINDOW_SIZE},
 };
-use crate::hash::HASH_POOL;
 
 const K_INV_LOG2: f64 = core::f64::consts::LOG2_E; // 1.0 / log(2.0)
 
@@ -817,7 +816,8 @@ pub fn lz77_optimal<C: Cache>(
     outputstore.greedy(s.lmc.lock().unwrap().deref_mut(), in_data, instart, inend);
     let mut last_cost = f64::INFINITY;
     let mut current_store = Lz77Store::new();
-    let mut best_cost = calculate_block_size(&outputstore, 0, outputstore.size(), BlockType::Dynamic);
+    let mut best_cost =
+        calculate_block_size(&outputstore, 0, outputstore.size(), BlockType::Dynamic);
     let mut stats = SymbolStats::default();
     stats.get_statistics(&outputstore);
     let mut best_stats = stats;
@@ -832,11 +832,12 @@ pub fn lz77_optimal<C: Cache>(
             inend,
             |a, b| get_cost_stat(a, b, &stats),
             &mut current_store,
-            &mut h
+            &mut h,
         );
         stats.clear_freqs();
         stats.get_statistics(&current_store);
-        let cost = calculate_block_size(&current_store, 0, current_store.size(), BlockType::Dynamic);
+        let cost =
+            calculate_block_size(&current_store, 0, current_store.size(), BlockType::Dynamic);
         if cost < best_cost {
             best_cost = cost;
             best_stats = stats;
