@@ -645,7 +645,7 @@ impl GenomeBuilder<SymbolTable> for SymbolTableBuilder {
                 table
             }
             _ => {
-                if index % 2 == 0 {
+                if index % 4 != 0 {
                     let mut table = SymbolTable::default();
                     for litlen in table.litlens.iter_mut() {
                         *litlen = rng.gen_range(0..=self.max_litlen_freq);
