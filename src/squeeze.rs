@@ -832,6 +832,7 @@ pub fn lz77_optimal<C: Cache>(
         if cost < best_cost {
             best_cost = cost;
             best_stats = stats;
+            best_stats.calculate_entropy();
         }
         if cost >= last_cost - f64::EPSILON {
             break;
