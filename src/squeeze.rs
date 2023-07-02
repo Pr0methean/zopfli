@@ -767,12 +767,6 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
             let first_parent = &parents[first_parent_index];
             for second_parent_index in first_parent_index + 1..num_parents {
                 let second_parent = &parents[second_parent_index];
-                if first_parent.litlens == second_parent.litlens {
-                    if first_parent.dists == second_parent.dists {
-                        children.push(*first_parent);
-                        continue;
-                    }
-                }
                 let litlens =
                     generate_child_chromosomes(first_parent.litlens, second_parent.litlens, rng);
                 let dists =
