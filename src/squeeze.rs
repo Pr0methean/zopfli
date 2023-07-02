@@ -654,7 +654,7 @@ impl GenomeBuilder<SymbolTable> for SymbolTableBuilder {
                 sorted_dists.reverse();
                 let mut sorted_dists = sorted_dists.into_iter();
                 for dist in table.dists.iter_mut() {
-                    if dist != 0 {
+                    if *dist != 0 {
                         *dist = sorted_dists.next().unwrap();
                     }
                 }
@@ -676,7 +676,7 @@ impl GenomeBuilder<SymbolTable> for SymbolTableBuilder {
                     }
                     table.litlens[256] = 1; // end symbol
                     for dist in table.dists.iter_mut() {
-                        if index % 2 == 0 || dist != 0 {
+                        if index % 2 == 0 || *dist != 0 {
                             *dist = rng.gen_range(0..=self.max_dist_freq);
                         }
                     }
@@ -799,21 +799,19 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
                     generate_child_chromosomes(second_parent.dists, first_parent.dists, rng);
                 for litlens in litlens.into_iter() {
                     for dists in dists.iter() {
-                        if !(i == 0 && j == 0) && !(i == 1 && j == 1) {
-                            children.push(SymbolTable {
-                                litlens,
-                                dists: *dists,
-                            });
-                        }
+                        children.push(SymbolTable {
+                            litlens,
+                            dists: *dists,
+                        });
                     }
                 }
                 children.push(SymbolTable {
-                        litlens: first_parent.litlens,
-                        dists: second_parent.dists
-                    });
+                    litlens: first_parent.litlens,
+                    dists: second_parent.dists,
+                });
                 children.push(SymbolTable {
                     litlens: second_parent.litlens,
-                    dists: first_parent.dists
+                    dists: first_parent.dists,
                 });
             }
         }
