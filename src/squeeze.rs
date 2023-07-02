@@ -815,15 +815,47 @@ pub fn lz77_optimal<C: Cache>(
 
     /* Initial run. */
     outputstore.greedy(s.lmc.lock().unwrap().deref_mut(), in_data, instart, inend);
-    let mut greedy_stats = SymbolStats::default();
-    greedy_stats.get_statistics(&outputstore);
-    debug!("Initial symbol table: {:?}", greedy_stats.table);
-    let max_litlen_freq = *greedy_stats.table.litlens.iter().max().unwrap();
-    let max_dist_freq = *greedy_stats.table.dists.iter().max().unwrap();
+    let mut last_cost = f64::INFINITY;
+    let mut current_store = Lz77Store::new();
+    let mut best_cost = calculate_block_size(&outputstore, 0, outputstore.size(), BlockType::Dynamic);
+    let mut stats = SymbolStats::default();
+    stats.get_statistics(&outputstore);
+    let mut best_stats = stats;
+    let hash_pool = &*HASH_POOL;
+    let mut h = hash_pool.pull();
+    loop {
+        let last_stats = stats;
+        lz77_optimal_run(
+            s.lmc.lock().unwrap().deref_mut(),
+            in_data,
+            instart,
+            inend,
+            |a, b| get_cost_stat(a, b, &stats),
+            &mut current_store,
+            &mut h
+        );
+        stats.clear_freqs();
+        stats.get_statistics(&current_store);
+        let cost = calculate_block_size(&current_store, 0, current_store.size(), BlockType::Dynamic);
+        if cost < best_cost {
+            best_cost = cost;
+            best_stats = stats;
+        }
+        if cost >= last_cost - f64::EPSILON {
+            break;
+        }
+        stats = add_weighed_stat_freqs(&stats, 1.0, &last_stats, 0.5);
+        stats.calculate_entropy();
+        last_cost = cost;
+        current_store.reset();
+    }
+    debug!("Symbol table at start of GA run: {:?}", best_stats.table);
+    let max_litlen_freq = *best_stats.table.litlens.iter().max().unwrap();
+    let max_dist_freq = *best_stats.table.dists.iter().max().unwrap();
     let genome_builder = SymbolTableBuilder {
         max_dist_freq,
         max_litlen_freq,
-        first_guess: greedy_stats.table,
+        first_guess: best_stats.table,
     };
     let initial_population = build_population()
         .with_genome_builder(genome_builder)
