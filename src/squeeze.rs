@@ -20,6 +20,7 @@ use genevo::{
     genetic::{Children, Genotype, Parents},
     operator::{prelude::ElitistReinserter, CrossoverOp, GeneticOperator, MutationOp},
     prelude::*,
+    random::Rng,
     selection::truncation::MaximizeSelector,
     simulation::State,
     termination::{StopFlag, Termination},
@@ -42,6 +43,7 @@ use crate::{
     symbols::{get_dist_extra_bits, get_dist_symbol, get_length_extra_bits, get_length_symbol},
     util::{ZOPFLI_MAX_MATCH, ZOPFLI_NUM_D, ZOPFLI_NUM_LL, ZOPFLI_WINDOW_MASK, ZOPFLI_WINDOW_SIZE},
 };
+use crate::hash::HASH_POOL;
 
 const K_INV_LOG2: f64 = core::f64::consts::LOG2_E; // 1.0 / log(2.0)
 
@@ -545,7 +547,7 @@ where
                 let stats = SymbolStats::from(*a);
                 let pool = &*LZ77_STORE_POOL;
                 let mut currentstore = pool.pull();
-                let mut h = ZopfliHash::new();
+                let mut h = HASH_POOL.pull();
                 lz77_optimal_run(
                     self.lmc.lock().unwrap().deref_mut(),
                     self.data,

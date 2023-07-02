@@ -1,6 +1,7 @@
 use std::alloc::{alloc, Layout};
 
 use once_cell::sync::Lazy;
+use lockfree_object_pool::LinearObjectPool;
 
 use crate::util::{ZOPFLI_MIN_MATCH, ZOPFLI_WINDOW_MASK, ZOPFLI_WINDOW_SIZE};
 
@@ -144,3 +145,6 @@ impl ZopfliHash {
         }
     }
 }
+
+pub static HASH_POOL: Lazy<LinearObjectPool<Box<ZopfliHash>>> = Lazy::new(|| LinearObjectPool::new(
+    ZopfliHash::new, |hash| hash.reset()));

@@ -15,6 +15,7 @@ use crate::{
     },
     Options,
 };
+use crate::hash::HASH_POOL;
 
 #[derive(Clone, Copy, Debug)]
 pub enum LitLen {
@@ -144,7 +145,7 @@ impl Lz77Store {
             return;
         }
         let windowstart = instart.saturating_sub(ZOPFLI_WINDOW_SIZE);
-        let mut h = ZopfliHash::new();
+        let mut h = HASH_POOL.pull();
 
         let arr = &in_data[..inend];
         h.warmup(arr, windowstart, inend);
@@ -252,7 +253,7 @@ impl Lz77Store {
             return;
         }
 
-        let mut h = ZopfliHash::new();
+        let mut h = HASH_POOL.pull();
 
         let arr = &in_data[..inend];
         h.warmup(arr, windowstart, inend);
