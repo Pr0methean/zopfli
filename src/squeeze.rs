@@ -669,7 +669,9 @@ impl GenomeBuilder<SymbolTable> for SymbolTableBuilder {
                     }
                     table.litlens[256] = 1; // end symbol
                     for dist in table.dists.iter_mut() {
-                        *dist = rng.gen_range(0..=self.max_dist_freq);
+                        if index % 2 == 0 || dist != 0 {
+                            *dist = rng.gen_range(0..=self.max_dist_freq);
+                        }
                     }
                     table
                 } else {
