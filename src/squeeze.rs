@@ -192,7 +192,8 @@ fn add_weighed_stat_freqs(
             (stats1.table.litlens[i] as f64 * w1 + stats2.table.litlens[i] as f64 * w2) as usize;
     }
     for i in 0..ZOPFLI_NUM_D {
-        result.table.dists[i] = (stats1.table.dists[i] as f64 * w1 + stats2.table.dists[i] as f64 * w2) as usize;
+        result.table.dists[i] =
+            (stats1.table.dists[i] as f64 * w1 + stats2.table.dists[i] as f64 * w2) as usize;
     }
     result.table.litlens[256] = 1; // End symbol.
     result
