@@ -814,9 +814,18 @@ pub fn lz77_optimal<C: Cache>(
 
     /* Initial run. */
     outputstore.greedy(s.lmc.lock().unwrap().deref_mut(), in_data, instart, inend);
-    let best_before_ga = lz77_deterministic_loop(&s, in_data, instart, inend, &mut outputstore);
+    let best_before_ga = lz77_deterministic_loop(
+        s.lmc.lock().unwrap().deref_mut(),
+        in_data,
+        instart,
+        inend,
+        &mut outputstore,
+    );
     let best_stats_before_ga = best_before_ga.stats;
-    debug!("Symbol table at start of GA run: {:?}", best_stats_before_ga);
+    debug!(
+        "Symbol table at start of GA run: {:?}",
+        best_stats_before_ga
+    );
     let max_litlen_freq = *best_before_ga.stats.litlens.iter().max().unwrap();
     let max_dist_freq = *best_before_ga.stats.dists.iter().max().unwrap();
     let genome_builder = SymbolTableBuilder {
@@ -884,7 +893,13 @@ pub fn lz77_optimal<C: Cache>(
                 let mut best_stats_after_ga = SymbolStats::default();
                 best_stats_after_ga.get_statistics(&outputstore);
                 if best_stats_after_ga.table != best_stats_before_ga {
-                    lz77_deterministic_loop(&s, in_data, instart, inend, &mut best_after_ga);
+                    lz77_deterministic_loop(
+                        s.lmc.lock().unwrap().deref_mut(),
+                        in_data,
+                        instart,
+                        inend,
+                        &mut best_after_ga,
+                    );
                 }
                 return best_after_ga;
             }
@@ -893,7 +908,13 @@ pub fn lz77_optimal<C: Cache>(
     }
 }
 
-fn lz77_deterministic_loop<C: Cache>(s: &ZopfliBlockState<C>, in_data: &[u8], instart: usize, inend: usize, outputstore: &mut Lz77Store) -> ZopfliOutput {
+fn lz77_deterministic_loop<C: Cache>(
+    lmc: &mut C,
+    in_data: &[u8],
+    instart: usize,
+    inend: usize,
+    outputstore: &mut Lz77Store,
+) -> ZopfliOutput {
     let mut last_cost = f64::INFINITY;
     let mut current_store = Lz77Store::new();
     let mut best_cost =
@@ -906,7 +927,7 @@ fn lz77_deterministic_loop<C: Cache>(s: &ZopfliBlockState<C>, in_data: &[u8], in
     loop {
         let last_stats = stats;
         lz77_optimal_run(
-            s.lmc.lock().unwrap().deref_mut(),
+            lmc,
             in_data,
             instart,
             inend,
@@ -935,6 +956,6 @@ fn lz77_deterministic_loop<C: Cache>(s: &ZopfliBlockState<C>, in_data: &[u8], in
     ZopfliOutput {
         stored: outputstore.clone(),
         stats: best_stats.table,
-        cost: best_cost
+        cost: best_cost,
     }
 }
