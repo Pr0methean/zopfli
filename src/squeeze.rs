@@ -878,10 +878,10 @@ pub fn lz77_optimal<C: Cache>(
                     processing_time,
                     stop_reason
                 );
-                let mut best_after_ga = s.best.into_inner().unwrap().unwrap().stored;
+                let mut best_after_ga = s.best.read().unwrap().clone().unwrap().stored;
                 let mut best_stats_after_ga = SymbolStats::default();
                 best_stats_after_ga.get_statistics(&outputstore);
-                if best_stats_after_ga != best_stats_before_ga {
+                if best_stats_after_ga.table != best_stats_before_ga.table {
                     lz77_deterministic_loop(&s, in_data, instart, inend, &mut best_after_ga);
                 }
                 return best_after_ga;
@@ -891,7 +891,7 @@ pub fn lz77_optimal<C: Cache>(
     }
 }
 
-fn lz77_deterministic_loop<C: Cache>(s: &ZopfliBlockState<C>, in_data: &[u8], instart: usize, inend: usize, mut outputstore: &mut Lz77Store) -> SymbolStats {
+fn lz77_deterministic_loop<C: Cache>(s: &ZopfliBlockState<C>, in_data: &[u8], instart: usize, inend: usize, outputstore: &mut Lz77Store) -> SymbolStats {
     let mut last_cost = f64::INFINITY;
     let mut current_store = Lz77Store::new();
     let mut best_cost =
@@ -919,6 +919,7 @@ fn lz77_deterministic_loop<C: Cache>(s: &ZopfliBlockState<C>, in_data: &[u8], in
         if cost < best_cost {
             best_cost = cost;
             best_stats = stats;
+            outputstore.clone_from(&current_store);
         }
         if cost >= last_cost - f64::EPSILON {
             break;
