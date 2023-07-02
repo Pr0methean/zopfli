@@ -814,16 +814,17 @@ pub fn lz77_optimal<C: Cache>(
 
     /* Initial run. */
     outputstore.greedy(s.lmc.lock().unwrap().deref_mut(), in_data, instart, inend);
-    let best_stats_before_ga =
-    *(s.best.write().unwrap().deref_mut()) = Some(lz77_deterministic_loop(&s, in_data, instart, inend, &mut outputstore));
-    debug!("Symbol table at start of GA run: {:?}", best_stats_before_ga.table);
-    let max_litlen_freq = *best_stats_before_ga.table.litlens.iter().max().unwrap();
-    let max_dist_freq = *best_stats_before_ga.table.dists.iter().max().unwrap();
+    let best_before_ga = lz77_deterministic_loop(&s, in_data, instart, inend, &mut outputstore);
+    let best_stats_before_ga = best_before_ga.stats;
+    debug!("Symbol table at start of GA run: {:?}", best_stats_before_ga);
+    let max_litlen_freq = *best_before_ga.stats.litlens.iter().max().unwrap();
+    let max_dist_freq = *best_before_ga.stats.dists.iter().max().unwrap();
     let genome_builder = SymbolTableBuilder {
         max_dist_freq,
         max_litlen_freq,
-        first_guess: best_stats_before_ga.table,
+        first_guess: best_stats_before_ga,
     };
+    *(s.best.write().unwrap().deref_mut()) = Some(best_before_ga);
     let initial_population = build_population()
         .with_genome_builder(genome_builder)
         .of_size(POPULATION_SIZE)
@@ -882,7 +883,7 @@ pub fn lz77_optimal<C: Cache>(
                 let mut best_after_ga = s.best.read().unwrap().clone().unwrap().stored;
                 let mut best_stats_after_ga = SymbolStats::default();
                 best_stats_after_ga.get_statistics(&outputstore);
-                if best_stats_after_ga.table != best_stats_before_ga.table {
+                if best_stats_after_ga.table != best_stats_before_ga {
                     lz77_deterministic_loop(&s, in_data, instart, inend, &mut best_after_ga);
                 }
                 return best_after_ga;
