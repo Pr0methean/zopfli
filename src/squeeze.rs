@@ -28,19 +28,20 @@ use lockfree_object_pool::LinearObjectPool;
 use log::debug;
 use once_cell::sync::Lazy;
 use ordered_float::OrderedFloat;
-use rand::distributions::{Bernoulli, Distribution};
-use rand::seq::SliceRandom;
+use rand::{
+    distributions::{Bernoulli, Distribution},
+    seq::SliceRandom,
+};
 use smallvec::{smallvec, SmallVec};
 
 use crate::{
     cache::Cache,
     deflate::{calculate_block_size, BlockType},
     hash::ZopfliHash,
-    lz77::{find_longest_match, LitLen, Lz77Store, ZopfliOutput},
+    lz77::{find_longest_match, LitLen, Lz77Store, ZopfliBlockState, ZopfliOutput},
     symbols::{get_dist_extra_bits, get_dist_symbol, get_length_extra_bits, get_length_symbol},
     util::{ZOPFLI_MAX_MATCH, ZOPFLI_NUM_D, ZOPFLI_NUM_LL, ZOPFLI_WINDOW_MASK, ZOPFLI_WINDOW_SIZE},
 };
-use crate::lz77::ZopfliBlockState;
 
 const K_INV_LOG2: f64 = core::f64::consts::LOG2_E; // 1.0 / log(2.0)
 
@@ -184,7 +185,8 @@ fn add_weighed_stat_freqs(
             (stats1.table.litlens[i] as f64 * w1 + stats2.table.litlens[i] as f64 * w2) as usize;
     }
     for i in 0..ZOPFLI_NUM_D {
-        result.table.dists[i] = (stats1.table.dists[i] as f64 * w1 + stats2.table.dists[i] as f64 * w2) as usize;
+        result.table.dists[i] =
+            (stats1.table.dists[i] as f64 * w1 + stats2.table.dists[i] as f64 * w2) as usize;
     }
     result.table.litlens[256] = 1; // End symbol.
     result
@@ -405,15 +407,7 @@ pub fn lz77_optimal_fixed<C: Cache>(
     store: &mut Lz77Store,
 ) {
     let mut h = ZopfliHash::new();
-    lz77_optimal_run(
-        lmc,
-        in_data,
-        instart,
-        inend,
-        get_cost_fixed,
-        store,
-        &mut h,
-    );
+    lz77_optimal_run(lmc, in_data, instart, inend, get_cost_fixed, store, &mut h);
 }
 
 impl Genotype for SymbolTable {
@@ -447,21 +441,22 @@ where
     where
         R: Rng + Sized,
     {
-        genome.litlens
+        genome
+            .litlens
             .iter_mut()
             .enumerate()
             .for_each(|(index, litlen)| {
-                    if index != 256 {
-                        // don't mutate the end symbol
-                        mutate_single_usize(
-                            &self.mutation_chance_distro,
-                            0,
-                            self.max_litlen_freq,
-                            rng,
-                            litlen,
-                        );
-                    }
-                });
+                if index != 256 {
+                    // don't mutate the end symbol
+                    mutate_single_usize(
+                        &self.mutation_chance_distro,
+                        0,
+                        self.max_litlen_freq,
+                        rng,
+                        litlen,
+                    );
+                }
+            });
         genome.dists.iter_mut().for_each(|dist| {
             mutate_single_usize(
                 &self.mutation_chance_distro,
@@ -642,7 +637,7 @@ impl GenomeBuilder<SymbolTable> for SymbolTableBuilder {
                 let mut table = SymbolTable::default();
                 table.litlens[256] = 1; // end symbol
                 table
-            },
+            }
             _ => {
                 if index % 2 == 0 {
                     let mut table = SymbolTable::default();
@@ -815,7 +810,8 @@ pub fn lz77_optimal<C: Cache>(
     outputstore.greedy(s.lmc.lock().unwrap().deref_mut(), in_data, instart, inend);
     let mut last_cost = f64::INFINITY;
     let mut current_store = Lz77Store::new();
-    let mut best_cost = calculate_block_size(&outputstore, 0, outputstore.size(), BlockType::Dynamic);
+    let mut best_cost =
+        calculate_block_size(&outputstore, 0, outputstore.size(), BlockType::Dynamic);
     let mut stats = SymbolStats::default();
     stats.get_statistics(&outputstore);
     let mut best_stats = stats;
@@ -828,10 +824,11 @@ pub fn lz77_optimal<C: Cache>(
             inend,
             |a, b| get_cost_stat(a, b, &stats),
             &mut current_store,
-            &mut h
+            &mut h,
         );
         stats.get_statistics(&current_store);
-        let cost = calculate_block_size(&current_store, 0, current_store.size(), BlockType::Dynamic);
+        let cost =
+            calculate_block_size(&current_store, 0, current_store.size(), BlockType::Dynamic);
         if cost < best_cost {
             best_cost = cost;
             best_stats = stats;
@@ -858,7 +855,10 @@ pub fn lz77_optimal<C: Cache>(
         .uniform_at_random();
     let algorithm = genetic_algorithm()
         .with_evaluation(&s)
-        .with_selection(MaximizeSelector::new(SELECTION_RATIO, NUM_INDIVIDUALS_PER_PARENT))
+        .with_selection(MaximizeSelector::new(
+            SELECTION_RATIO,
+            NUM_INDIVIDUALS_PER_PARENT,
+        ))
         .with_crossover(SymbolTableCrossBreeder::default())
         .with_mutation(SymbolTableMutator {
             mutation_chance_distro: Bernoulli::new(MUTATION_RATE).unwrap(),

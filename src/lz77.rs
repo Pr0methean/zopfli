@@ -4,11 +4,17 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use moka::sync::Cache as MokaCache;
 
-use crate::{cache::Cache, hash::{Which, ZopfliHash}, Options, squeeze::SymbolTable, symbols::{get_dist_symbol, get_length_symbol}, util::{
-    ZOPFLI_MAX_CHAIN_HITS, ZOPFLI_MAX_MATCH, ZOPFLI_MIN_MATCH, ZOPFLI_NUM_D, ZOPFLI_NUM_LL,
-    ZOPFLI_WINDOW_MASK, ZOPFLI_WINDOW_SIZE,
-}};
-use crate::cache::{NoCache, ZopfliLongestMatchCache};
+use crate::{
+    cache::{Cache, NoCache, ZopfliLongestMatchCache},
+    hash::{Which, ZopfliHash},
+    squeeze::SymbolTable,
+    symbols::{get_dist_symbol, get_length_symbol},
+    util::{
+        ZOPFLI_MAX_CHAIN_HITS, ZOPFLI_MAX_MATCH, ZOPFLI_MIN_MATCH, ZOPFLI_NUM_D, ZOPFLI_NUM_LL,
+        ZOPFLI_WINDOW_MASK, ZOPFLI_WINDOW_SIZE,
+    },
+    Options,
+};
 
 #[derive(Clone, Copy, Debug)]
 pub enum LitLen {

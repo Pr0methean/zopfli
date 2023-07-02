@@ -8,7 +8,7 @@ use crate::{
     cache::ZopfliLongestMatchCache,
     iter::ToFlagLastIterator,
     katajainen::length_limited_code_lengths,
-    lz77::{LitLen, Lz77Store},
+    lz77::{LitLen, Lz77Store, ZopfliBlockState},
     squeeze::{lz77_optimal, lz77_optimal_fixed},
     symbols::{
         get_dist_extra_bits, get_dist_extra_bits_value, get_dist_symbol,
@@ -19,7 +19,6 @@ use crate::{
     util::{ZOPFLI_NUM_D, ZOPFLI_NUM_LL, ZOPFLI_WINDOW_SIZE},
     Error, Options, Write,
 };
-use crate::lz77::ZopfliBlockState;
 
 /// A DEFLATE encoder powered by the Zopfli algorithm that compresses data written
 /// to it to the specified sink. Most users will find using [`compress`](crate::compress)
@@ -1246,13 +1245,7 @@ fn blocksplit_attempt<W: Write>(
         }
     }
 
-    add_all_blocks(
-        &splitpoints,
-        &lz77,
-        final_block,
-        in_data,
-        bitwise_writer,
-    )
+    add_all_blocks(&splitpoints, &lz77, final_block, in_data, bitwise_writer)
 }
 
 /// Since an uncompressed block can be max 65535 in size, it actually adds
