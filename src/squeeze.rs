@@ -935,8 +935,6 @@ fn lz77_deterministic_loop<C: Cache>(
             &mut current_store,
             &mut h,
         );
-        stats.clear_freqs();
-        stats.get_statistics(&current_store);
         let cost =
             calculate_block_size(&current_store, 0, current_store.size(), BlockType::Dynamic);
         if cost < best_cost {
@@ -948,6 +946,8 @@ fn lz77_deterministic_loop<C: Cache>(
         if cost >= last_cost - f64::EPSILON {
             break;
         }
+        stats.clear_freqs();
+        stats.get_statistics(&current_store);
         stats = add_weighed_stat_freqs(&stats, 1.0, &last_stats, 0.5);
         stats.calculate_entropy();
         last_cost = cost;
