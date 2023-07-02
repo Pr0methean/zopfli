@@ -653,6 +653,14 @@ impl GenomeBuilder<SymbolTable> for SymbolTableBuilder {
                 table.dists.reverse();
                 table
             }
+            3 => {
+                let mut table = SymbolTable {
+                    litlens: [self.max_litlen_freq; ZOPFLI_NUM_LL],
+                    dists: [self.max_dist_freq; ZOPFLI_NUM_D],
+                };
+                table.litlens[256] = 1; // end symbol
+                table
+            }
             _ => {
                 if index % 4 != 0 {
                     let mut table = SymbolTable::default();
