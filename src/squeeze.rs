@@ -869,7 +869,7 @@ pub fn lz77_optimal<C: Cache>(
             }
             Ok(SimResult::Final(step, processing_time, duration, stop_reason)) => {
                 debug!(
-                    "final result: generation: {},\
+                    "Result at end of GA: generation: {},\
                          best fitness: {}, symbol table: {:?}, duration: {}, processing_time: {}, stop_reason: {}",
                     step.iteration,
                     step.result.best_solution.solution.fitness,
@@ -917,6 +917,7 @@ fn lz77_deterministic_loop<C: Cache>(s: &ZopfliBlockState<C>, in_data: &[u8], in
         let cost =
             calculate_block_size(&current_store, 0, current_store.size(), BlockType::Dynamic);
         if cost < best_cost {
+            debug!("Reduced cost to {} deterministically", cost);
             best_cost = cost;
             best_stats = stats;
             outputstore.clone_from(&current_store);
