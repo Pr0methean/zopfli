@@ -822,7 +822,7 @@ where
     if parent0 == parent1 {
         smallvec![parent0]
     } else {
-        let cut_point = rng.gen_range(1..N as i32) as usize;
+        let cut_point = rng.gen_range(0..=N);
         let mut hybrid_0 = parent0;
         hybrid_0[cut_point..].copy_from_slice(&parent1[cut_point..]);
         let mut hybrid_1 = parent1;
@@ -857,14 +857,6 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
                         });
                     }
                 }
-                children.push(SymbolTable {
-                    litlens: first_parent.litlens,
-                    dists: second_parent.dists,
-                });
-                children.push(SymbolTable {
-                    litlens: second_parent.litlens,
-                    dists: first_parent.dists,
-                });
             }
         }
         children
