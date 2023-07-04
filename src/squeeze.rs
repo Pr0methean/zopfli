@@ -1060,7 +1060,7 @@ fn lz77_deterministic_loop<C: Cache>(
         }
         stats.clear_freqs();
         stats.get_statistics(&current_store);
-        stats = add_weighed_stat_freqs(&stats, 1.0, &last_stats, 0.5);
+        stats = add_weighed_stat_freqs(&stats, 2.0 / 3.0, &last_stats, 1.0 / 3.0);
         stats.calculate_entropy();
         last_cost = cost;
         current_store.reset();
