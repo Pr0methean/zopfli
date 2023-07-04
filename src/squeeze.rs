@@ -25,6 +25,7 @@ use genevo::{
     simulation::State,
     termination::{StopFlag, Termination},
 };
+use genevo::operator::prelude::TournamentSelector;
 use lockfree_object_pool::LinearObjectPool;
 use log::debug;
 use once_cell::sync::Lazy;
@@ -833,11 +834,13 @@ pub fn lz77_optimal<C: Cache>(
     max_iterations: Option<u64>,
     max_iterations_without_improvement: Option<u64>,
 ) -> Lz77Store {
-    const POPULATION_SIZE: usize = 128;
+    const POPULATION_SIZE: usize = 256;
     const SELECTION_RATIO: f64 = 0.7;
     const NUM_INDIVIDUALS_PER_PARENT: usize = 2;
     const MUTATION_RATE: f64 = 0.01;
     const REPLACE_RATIO: f64 = 0.7;
+    const TOURNAMENT_SIZE: usize = 4;
+    const TOURNAMENT_PROBABILITY: f64 = 0.75;
 
     let instart = s.blockstart;
     let inend = s.blockend;
@@ -872,9 +875,12 @@ pub fn lz77_optimal<C: Cache>(
         .uniform_at_random();
     let algorithm = genetic_algorithm()
         .with_evaluation(&s)
-        .with_selection(MaximizeSelector::new(
+        .with_selection(TournamentSelector::new(
             SELECTION_RATIO,
             NUM_INDIVIDUALS_PER_PARENT,
+            TOURNAMENT_SIZE,
+            TOURNAMENT_PROBABILITY,
+            true
         ))
         .with_crossover(SymbolTableCrossBreeder::default())
         .with_mutation(SymbolTableMutator {
