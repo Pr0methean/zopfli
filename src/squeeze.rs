@@ -923,7 +923,7 @@ pub fn lz77_optimal<C: Cache>(
                 );
                 let mut best_after_ga = s.best.read().unwrap().clone().unwrap().stored;
                 let mut best_stats_after_ga = SymbolStats::default();
-                best_stats_after_ga.get_statistics(&outputstore);
+                best_stats_after_ga.get_statistics(&best_after_ga);
                 if best_stats_after_ga.table != best_stats_before_ga {
                     lz77_deterministic_loop(
                         s.lmc.lock().unwrap().deref_mut(),
