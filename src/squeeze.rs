@@ -827,14 +827,14 @@ fn generate_child_chromosomes<T, const N: usize, R>(
     rng: &mut R,
 ) -> SmallVec<[[T; N]; 2]>
 where
-    T: Copy + PartialEq,
+    T: Copy + PartialEq + Default,
     R: Rng + Sized,
 {
     let cut_point = rng.gen_range(0..=N);
-    let mut hybrid_0 = [0; N];
+    let mut hybrid_0 = [T::default(); N];
     hybrid_0[..cut_point].copy_from_slice(&parent0[..cut_point]);
     hybrid_0[cut_point..].copy_from_slice(&parent1[cut_point..]);
-    let mut hybrid_1 = [0; N];
+    let mut hybrid_1 = [T::default(); N];
     hybrid_1[..cut_point].copy_from_slice(&parent1[..cut_point]);
     hybrid_1[cut_point..].copy_from_slice(&parent0[cut_point..]);
     smallvec![hybrid_0, hybrid_1]
