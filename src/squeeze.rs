@@ -819,16 +819,12 @@ where
     T: Copy + PartialEq,
     R: Rng + Sized,
 {
-    if parent0 == parent1 {
-        smallvec![parent0]
-    } else {
-        let cut_point = rng.gen_range(0..=N);
-        let mut hybrid_0 = parent0;
-        hybrid_0[cut_point..].copy_from_slice(&parent1[cut_point..]);
-        let mut hybrid_1 = parent1;
-        hybrid_1[cut_point..].copy_from_slice(&parent0[cut_point..]);
-        smallvec![hybrid_0, hybrid_1]
-    }
+    let cut_point = rng.gen_range(0..=N);
+    let mut hybrid_0 = parent0;
+    hybrid_0[cut_point..].copy_from_slice(&parent1[cut_point..]);
+    let mut hybrid_1 = parent1;
+    hybrid_1[cut_point..].copy_from_slice(&parent0[cut_point..]);
+    smallvec![hybrid_0, hybrid_1]
 }
 
 impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
