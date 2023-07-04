@@ -719,8 +719,10 @@ where
     where
         R: Rng + Sized,
     {
-        let mut ranked = population.individuals().to_vec();
-        ranked.sort_unstable_by_key(|individual| population.fitness_of_individual(individual));
+        let individuals = population.individuals().to_vec();
+        let fitness = population.fitness_values();
+        let mut ranked: Vec<_> = individuals.into_iter().zip(fitness.iter().cloned()).collect();
+        ranked.sort_unstable_by_key(|(_, fitness)| fitness.clone());
         let dist = WeightedIndex::new(1..=ranked.len()).unwrap();
         let num_parents = (ranked.len() as f64 * self.selection_ratio + 0.5) as usize;
         let mut parents = Vec::with_capacity(num_parents);
@@ -735,7 +737,7 @@ where
             parents.push(
                 parent_indices
                     .into_iter()
-                    .map(|index| ranked[index].clone())
+                    .map(|index| ranked[index].0.clone())
                     .collect(),
             );
         }
