@@ -1215,7 +1215,6 @@ fn blocksplit_attempt<W: Write>(
     let store = lz77_optimal(
         s,
         in_data,
-
         options.iteration_count.map(NonZeroU64::get),
         options.iterations_without_improvement.map(NonZeroU64::get),
     );

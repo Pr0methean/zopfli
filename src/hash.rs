@@ -1,14 +1,13 @@
 #[cfg(not(feature = "std"))]
 use std::alloc::{alloc, Layout};
-
-use lockfree_object_pool::LinearObjectPool;
-use once_cell::sync::Lazy;
 #[cfg(feature = "std")]
 use std::{
     alloc::{alloc, Layout},
     boxed::Box,
 };
 
+use lockfree_object_pool::LinearObjectPool;
+use once_cell::sync::Lazy;
 #[cfg(feature = "std")]
 use once_cell::sync::Lazy;
 
