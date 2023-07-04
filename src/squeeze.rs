@@ -835,7 +835,7 @@ pub fn lz77_optimal<C: Cache>(
     max_iterations_without_improvement: Option<u64>,
 ) -> Lz77Store {
     const POPULATION_SIZE: usize = 256;
-    const SELECTION_RATIO: f64 = 0.7;
+    const SELECTION_RATIO: f64 = 0.35;
     const NUM_INDIVIDUALS_PER_PARENT: usize = 2;
     const MUTATION_RATE: f64 = 0.01;
     const REPLACE_RATIO: f64 = 0.7;
