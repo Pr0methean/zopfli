@@ -827,7 +827,6 @@ fn generate_child_chromosomes<const N: usize, R>(
     rng: &mut R,
 ) -> [[usize; N]; 2]
 where
-    T: Copy + PartialEq + Default,
     R: Rng + Sized,
 {
     let cut_point = rng.gen_range(0..=N);
