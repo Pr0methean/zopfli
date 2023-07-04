@@ -721,10 +721,7 @@ where
     {
         let individuals = population.individuals().to_vec();
         let fitness = population.fitness_values();
-        let mut ranked: Vec<_> = individuals
-            .into_iter()
-            .zip(fitness.iter().cloned())
-            .collect();
+        let mut ranked: Vec<_> = individuals.into_iter().zip(fitness.iter().cloned()).collect();
         ranked.sort_unstable_by_key(|(_, fitness)| fitness.clone());
         let dist = WeightedIndex::new(1..=ranked.len()).unwrap();
         let num_parents = (ranked.len() as f64 * self.selection_ratio + 0.5) as usize;
@@ -804,18 +801,10 @@ where
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-struct SymbolTableCrossBreeder<D>
-where
-    D: Distribution<bool> + Clone,
-{
-    crossover_chance_dist: D,
-}
+#[derive(Copy, Clone, Default, Debug)]
+struct SymbolTableCrossBreeder {}
 
-impl<D> GeneticOperator for SymbolTableCrossBreeder<D>
-where
-    D: Distribution<bool> + Clone,
-{
+impl GeneticOperator for SymbolTableCrossBreeder {
     fn name() -> String {
         "SymbolTableCrossBreeder".to_string()
     }
@@ -839,10 +828,7 @@ where
     [hybrid_0, hybrid_1]
 }
 
-impl<D> CrossoverOp<SymbolTable> for SymbolTableCrossBreeder<D>
-where
-    D: Distribution<bool> + Clone,
-{
+impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
     fn crossover<R>(&self, parents: Parents<SymbolTable>, rng: &mut R) -> Children<SymbolTable>
     where
         R: Rng + Sized,
@@ -856,41 +842,27 @@ where
             let first_parent = &parents[first_parent_index];
             for second_parent_index in first_parent_index + 1..num_parents {
                 let second_parent = &parents[second_parent_index];
-                if self.crossover_chance_dist.sample(rng) {
-                    let litlens = generate_child_chromosomes(
-                        first_parent.litlens,
-                        second_parent.litlens,
-                        rng,
-                    );
-                    let dists =
-                        generate_child_chromosomes(second_parent.dists, first_parent.dists, rng);
-                    if rng.gen_bool(0.5) {
-                        children.push(SymbolTable {
-                            litlens: litlens[0],
-                            dists: dists[1],
-                        });
-                        children.push(SymbolTable {
-                            litlens: litlens[1],
-                            dists: dists[0],
-                        });
-                    } else {
-                        children.push(SymbolTable {
-                            litlens: litlens[0],
-                            dists: dists[0],
-                        });
-                        children.push(SymbolTable {
-                            litlens: litlens[1],
-                            dists: dists[1],
-                        });
-                    }
-                } else {
+                let litlens =
+                    generate_child_chromosomes(first_parent.litlens, second_parent.litlens, rng);
+                let dists =
+                    generate_child_chromosomes(second_parent.dists, first_parent.dists, rng);
+                if rng.gen_bool(0.5) {
                     children.push(SymbolTable {
-                        litlens: first_parent.litlens,
-                        dists: second_parent.dists,
+                        litlens: litlens[0],
+                        dists: dists[1]
                     });
                     children.push(SymbolTable {
-                        litlens: second_parent.litlens,
-                        dists: first_parent.dists,
+                        litlens: litlens[1],
+                        dists: dists[0]
+                    });
+                } else {
+                    children.push(SymbolTable {
+                        litlens: litlens[0],
+                        dists: dists[0]
+                    });
+                    children.push(SymbolTable {
+                        litlens: litlens[1],
+                        dists: dists[1]
                     });
                 }
             }
@@ -913,7 +885,6 @@ pub fn lz77_optimal<C: Cache>(
     const NUM_INDIVIDUALS_PER_PARENT: usize = 2;
     const MUTATION_RATE: f64 = 0.01;
     const REPLACE_RATIO: f64 = 0.7;
-    const CROSSOVER_CHANCE: f64 = 0.8;
 
     let instart = s.blockstart;
     let inend = s.blockend;
@@ -952,9 +923,7 @@ pub fn lz77_optimal<C: Cache>(
             selection_ratio: SELECTION_RATIO,
             num_individuals_per_parents: NUM_INDIVIDUALS_PER_PARENT,
         })
-        .with_crossover(SymbolTableCrossBreeder {
-            crossover_chance_dist: Bernoulli::new(CROSSOVER_CHANCE).unwrap(),
-        })
+        .with_crossover(SymbolTableCrossBreeder::default())
         .with_mutation(SymbolTableMutator {
             mutation_chance_distro: Bernoulli::new(MUTATION_RATE).unwrap(),
             max_litlen_freq,
