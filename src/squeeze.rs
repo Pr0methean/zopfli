@@ -900,7 +900,7 @@ pub fn lz77_optimal<C: Cache>(
                     let evaluated_population = step.result.evaluated_population;
                     prev_best = best_solution.solution.fitness.0 .0;
                     debug!(
-                        "step: generation: {}, average_fitness: {}, \
+                        "step: generation: {}, average_fitness: {:.3}, \
                          best fitness: {}, duration: {}, processing_time: {}",
                         step.iteration,
                         evaluated_population.average_fitness(),
