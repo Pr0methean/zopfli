@@ -16,22 +16,21 @@ use core::{
 use std::{iter, ops::Deref};
 
 use genevo::{
+    algorithm::EvaluatedPopulation,
     ga,
     genetic::{Children, Genotype, Parents},
-    operator::{prelude::ElitistReinserter, CrossoverOp, GeneticOperator, MutationOp},
+    operator::{prelude::ElitistReinserter, CrossoverOp, GeneticOperator, MutationOp, SelectionOp},
     prelude::*,
     random::Rng,
-    selection::truncation::MaximizeSelector,
     simulation::State,
     termination::{StopFlag, Termination},
 };
-use genevo::operator::prelude::TournamentSelector;
 use lockfree_object_pool::LinearObjectPool;
 use log::debug;
 use once_cell::sync::Lazy;
 use ordered_float::OrderedFloat;
 use rand::{
-    distributions::{Bernoulli, Distribution},
+    distributions::{Bernoulli, Distribution, WeightedIndex},
     seq::SliceRandom,
 };
 use smallvec::{smallvec, SmallVec};
@@ -699,6 +698,51 @@ impl GenomeBuilder<SymbolTable> for SymbolTableBuilder {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+struct RankBasedSelector {
+    selection_ratio: f64,
+    num_individuals_per_parents: usize,
+}
+
+impl GeneticOperator for RankBasedSelector {
+    fn name() -> String {
+        "RankBasedSelector".to_string()
+    }
+}
+
+impl<G, F> SelectionOp<G, F> for RankBasedSelector
+where
+    G: Genotype,
+    F: Fitness,
+{
+    fn select_from<R>(&self, population: &EvaluatedPopulation<G, F>, rng: &mut R) -> Vec<Parents<G>>
+    where
+        R: Rng + Sized,
+    {
+        let mut ranked = population.individuals().to_vec();
+        ranked.sort_unstable_by_key(|individual| population.fitness_of_individual(individual));
+        let dist = WeightedIndex::new(1..=ranked.len()).unwrap();
+        let num_parents = (ranked.len() as f64 * self.selection_ratio + 0.5) as usize;
+        let mut parents = Vec::with_capacity(num_parents);
+        for _ in 0..num_parents {
+            let mut parent_indices = Vec::with_capacity(self.num_individuals_per_parents);
+            while parent_indices.len() < self.num_individuals_per_parents {
+                parent_indices.push(dist.sample(rng));
+                parent_indices.sort();
+                parent_indices.dedup();
+            }
+            parent_indices.shuffle(rng);
+            parents.push(
+                parent_indices
+                    .into_iter()
+                    .map(|index| ranked[index].clone())
+                    .collect(),
+            );
+        }
+        parents
+    }
+}
+
 #[derive(Debug)]
 struct GenerationsWithoutImprovementLimiter {
     current_best: f64,
@@ -839,8 +883,6 @@ pub fn lz77_optimal<C: Cache>(
     const NUM_INDIVIDUALS_PER_PARENT: usize = 2;
     const MUTATION_RATE: f64 = 0.01;
     const REPLACE_RATIO: f64 = 0.7;
-    const TOURNAMENT_SIZE: usize = 4;
-    const TOURNAMENT_PROBABILITY: f64 = 0.75;
 
     let instart = s.blockstart;
     let inend = s.blockend;
@@ -875,13 +917,10 @@ pub fn lz77_optimal<C: Cache>(
         .uniform_at_random();
     let algorithm = genetic_algorithm()
         .with_evaluation(&s)
-        .with_selection(TournamentSelector::new(
-            SELECTION_RATIO,
-            NUM_INDIVIDUALS_PER_PARENT,
-            TOURNAMENT_SIZE,
-            TOURNAMENT_PROBABILITY,
-            true
-        ))
+        .with_selection(RankBasedSelector {
+            selection_ratio: SELECTION_RATIO,
+            num_individuals_per_parents: NUM_INDIVIDUALS_PER_PARENT,
+        })
         .with_crossover(SymbolTableCrossBreeder::default())
         .with_mutation(SymbolTableMutator {
             mutation_chance_distro: Bernoulli::new(MUTATION_RATE).unwrap(),
