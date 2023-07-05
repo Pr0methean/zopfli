@@ -33,7 +33,6 @@ use rand::{
     distributions::{Bernoulli, Distribution, WeightedIndex},
     seq::SliceRandom,
 };
-use smallvec::{smallvec, SmallVec};
 
 use crate::{
     cache::Cache,
@@ -657,8 +656,9 @@ impl SymbolTableBuilder {
             }
             fixed_dists.push(nonzero_sorted_dists);
         } else {
-            table.dists.sort();
-            table.dists.reverse();
+            let mut sorted_dists = first_guess.dists;
+            sorted_dists.sort();
+            sorted_dists.reverse();
             fixed_dists.push(sorted_dists);
         }
         let mut maxed_litlens = [max_litlen_freq; ZOPFLI_NUM_LL];
@@ -666,20 +666,22 @@ impl SymbolTableBuilder {
         fixed_litlens.push(maxed_litlens);
         let maxed_dists = [max_dist_freq; ZOPFLI_NUM_D];
         fixed_dists.push(maxed_dists);
-        let fixed_population: Vec<_> = fixed_litlens
+        let mut fixed_population = [SymbolTable::default(); 16];
+        fixed_litlens
             .into_iter()
             .flat_map(|litlens| {
-                fixed_dists.iter().map(|dists| SymbolTable {
+                fixed_dists.iter().map(move |dists| SymbolTable {
                     litlens,
                     dists: *dists,
                 })
             })
-            .collect();
+            .enumerate()
+            .for_each(|(index, value)| fixed_population[index] = value);
         SymbolTableBuilder {
             first_guess,
             max_litlen_freq,
             max_dist_freq,
-            fixed_population: fixed_population.into_slice(),
+            fixed_population
         }
     }
 }
