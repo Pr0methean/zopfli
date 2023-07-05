@@ -628,8 +628,60 @@ where
 #[derive(Debug)]
 pub struct SymbolTableBuilder {
     first_guess: SymbolTable,
+    fixed_population: [SymbolTable; 16],
     max_litlen_freq: usize,
     max_dist_freq: usize,
+}
+
+impl SymbolTableBuilder {
+    fn new(first_guess: SymbolTable, max_litlen_freq: usize, max_dist_freq: usize) -> Self {
+        let mut fixed_litlens = Vec::with_capacity(4);
+        let mut fixed_dists = Vec::with_capacity(4);
+        fixed_litlens.push(first_guess.litlens);
+        fixed_dists.push(first_guess.dists);
+        let mut sorted_litlens = first_guess.litlens;
+        sorted_litlens.sort_unstable();
+        sorted_litlens.reverse();
+        sorted_litlens[256] = 1; // End symbol
+        fixed_litlens.push(sorted_litlens);
+        if max_dist_freq > 1 {
+            let mut sorted_dists = first_guess.dists;
+            sorted_dists.sort_unstable();
+            sorted_dists.reverse();
+            let mut sorted_dists = sorted_dists.into_iter();
+            let mut nonzero_sorted_dists = first_guess.dists.clone();
+            for dist in nonzero_sorted_dists.iter_mut() {
+                if *dist != 0 {
+                    *dist = sorted_dists.next().unwrap();
+                }
+            }
+            fixed_dists.push(nonzero_sorted_dists);
+        } else {
+            table.dists.sort();
+            table.dists.reverse();
+            fixed_dists.push(sorted_dists);
+        }
+        let mut maxed_litlens = [max_litlen_freq; ZOPFLI_NUM_LL];
+        maxed_litlens[256] = 1;
+        fixed_litlens.push(maxed_litlens);
+        let maxed_dists = [max_dist_freq; ZOPFLI_NUM_D];
+        fixed_dists.push(maxed_dists);
+        let fixed_population: Vec<_> = fixed_litlens
+            .into_iter()
+            .flat_map(|litlens| {
+                fixed_dists.iter().map(|dists| SymbolTable {
+                    litlens,
+                    dists: *dists,
+                })
+            })
+            .collect();
+        SymbolTableBuilder {
+            first_guess,
+            max_litlen_freq,
+            max_dist_freq,
+            fixed_population: fixed_population.into_slice(),
+        }
+    }
 }
 
 impl GenomeBuilder<SymbolTable> for SymbolTableBuilder {
@@ -637,62 +689,27 @@ impl GenomeBuilder<SymbolTable> for SymbolTableBuilder {
     where
         R: Rng + Sized,
     {
-        match index {
-            0 => self.first_guess,
-            1 => {
+        if index < self.fixed_population.len() {
+            self.fixed_population[index]
+        } else {
+            if index % 4 != 0 {
                 let mut table = SymbolTable::default();
+                for litlen in table.litlens.iter_mut() {
+                    *litlen = rng.gen_range(0..=self.max_litlen_freq);
+                }
                 table.litlens[256] = 1; // end symbol
+                for dist in table.dists.iter_mut() {
+                    if self.max_dist_freq == 1 || index % 2 == 0 || *dist != 0 {
+                        *dist = rng.gen_range(0..=self.max_dist_freq);
+                    }
+                }
                 table
-            }
-            2 => {
+            } else {
                 let mut table = self.first_guess;
-                table.litlens.sort();
-                table.litlens.reverse();
+                table.litlens.shuffle(rng);
                 table.litlens[256] = 1; // end symbol
-                if self.max_dist_freq > 1 {
-                    let mut sorted_dists = table.dists.clone();
-                    sorted_dists.sort_unstable();
-                    sorted_dists.reverse();
-                    let mut sorted_dists = sorted_dists.into_iter();
-                    for dist in table.dists.iter_mut() {
-                        if *dist != 0 {
-                            *dist = sorted_dists.next().unwrap();
-                        }
-                    }
-                } else {
-                    table.dists.sort();
-                    table.dists.reverse();
-                }
+                table.dists.shuffle(rng);
                 table
-            }
-            3 => {
-                let mut table = SymbolTable {
-                    litlens: [self.max_litlen_freq; ZOPFLI_NUM_LL],
-                    dists: [self.max_dist_freq; ZOPFLI_NUM_D],
-                };
-                table.litlens[256] = 1; // end symbol
-                table
-            }
-            _ => {
-                if index % 4 != 0 {
-                    let mut table = SymbolTable::default();
-                    for litlen in table.litlens.iter_mut() {
-                        *litlen = rng.gen_range(0..=self.max_litlen_freq);
-                    }
-                    table.litlens[256] = 1; // end symbol
-                    for dist in table.dists.iter_mut() {
-                        if self.max_dist_freq == 1 || index % 2 == 0 || *dist != 0 {
-                            *dist = rng.gen_range(0..=self.max_dist_freq);
-                        }
-                    }
-                    table
-                } else {
-                    let mut table = self.first_guess;
-                    table.litlens.shuffle(rng);
-                    table.litlens[256] = 1; // end symbol
-                    table.dists.shuffle(rng);
-                    table
-                }
             }
         }
     }
@@ -721,7 +738,10 @@ where
     {
         let individuals = population.individuals().to_vec();
         let fitness = population.fitness_values();
-        let mut ranked: Vec<_> = individuals.into_iter().zip(fitness.iter().cloned()).collect();
+        let mut ranked: Vec<_> = individuals
+            .into_iter()
+            .zip(fitness.iter().cloned())
+            .collect();
         ranked.sort_unstable_by_key(|(_, fitness)| fitness.clone());
         let dist = WeightedIndex::new(1..=ranked.len()).unwrap();
         let num_parents = (ranked.len() as f64 * self.selection_ratio + 0.5) as usize;
@@ -849,20 +869,20 @@ impl CrossoverOp<SymbolTable> for SymbolTableCrossBreeder {
                 if rng.gen_bool(0.5) {
                     children.push(SymbolTable {
                         litlens: litlens[0],
-                        dists: dists[1]
+                        dists: dists[1],
                     });
                     children.push(SymbolTable {
                         litlens: litlens[1],
-                        dists: dists[0]
+                        dists: dists[0],
                     });
                 } else {
                     children.push(SymbolTable {
                         litlens: litlens[0],
-                        dists: dists[0]
+                        dists: dists[0],
                     });
                     children.push(SymbolTable {
                         litlens: litlens[1],
-                        dists: dists[1]
+                        dists: dists[1],
                     });
                 }
             }
@@ -907,11 +927,8 @@ pub fn lz77_optimal<C: Cache>(
     );
     let max_litlen_freq = *best_before_ga.stats.litlens.iter().max().unwrap();
     let max_dist_freq = *best_before_ga.stats.dists.iter().max().unwrap();
-    let genome_builder = SymbolTableBuilder {
-        max_dist_freq,
-        max_litlen_freq,
-        first_guess: best_stats_before_ga,
-    };
+    let genome_builder =
+        SymbolTableBuilder::new(best_stats_before_ga, max_dist_freq, max_litlen_freq);
     *(s.best.write().unwrap().deref_mut()) = Some(best_before_ga);
     let initial_population = build_population()
         .with_genome_builder(genome_builder)
