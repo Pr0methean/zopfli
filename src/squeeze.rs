@@ -932,7 +932,7 @@ pub fn lz77_optimal<C: Cache>(
     const NUM_INDIVIDUALS_PER_PARENT: usize = 2;
     const MUTATION_RATE: f64 = 0.01;
     const REPLACE_RATIO: f64 = 0.7;
-    const CROSSOVER_CHANCE: f64 = 0.8;
+    const CROSSOVER_CHANCE: f64 = 0.6;
 
     let instart = s.blockstart;
     let inend = s.blockend;
