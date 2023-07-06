@@ -186,8 +186,9 @@ fn add_weighed_stat_freqs(
     let mut result = SymbolStats::default();
 
     for i in 0..ZOPFLI_NUM_LL {
-        result.table.litlens[i] =
-            (stats1.table.litlens[i] as f64 * w1 + stats2.table.litlens[i] as f64 * w2 + 0.5) as usize;
+        result.table.litlens[i] = (stats1.table.litlens[i] as f64 * w1
+            + stats2.table.litlens[i] as f64 * w2
+            + 0.5) as usize;
     }
     for i in 0..ZOPFLI_NUM_D {
         result.table.dists[i] =
@@ -425,6 +426,7 @@ where
     T: Distribution<bool>,
 {
     mutation_chance_distro: T,
+    mutate_by_copying_chance_distro: T,
     max_litlen_freq: usize,
     max_dist_freq: usize,
 }
@@ -446,53 +448,55 @@ where
     where
         R: Rng + Sized,
     {
-        genome
-            .litlens
-            .iter_mut()
-            .enumerate()
-            .for_each(|(index, litlen)| {
-                if index != 256 {
-                    // don't mutate the end symbol
-                    mutate_single_usize(
-                        &self.mutation_chance_distro,
-                        0,
-                        self.max_litlen_freq,
-                        rng,
-                        litlen,
-                    );
-                }
-            });
-        genome.dists.iter_mut().for_each(|dist| {
-            mutate_single_usize(
+        (0..ZOPFLI_NUM_LL).for_each(|index| {
+            if index != 256 {
+                // don't mutate the end symbol
+                mutate_gene(
+                    &self.mutation_chance_distro,
+                    &self.mutate_by_copying_chance_distro,
+                    0,
+                    self.max_litlen_freq,
+                    rng,
+                    index,
+                    &mut genome.litlens,
+                );
+            }
+        });
+        (0..ZOPFLI_NUM_D).for_each(|index| {
+            mutate_gene(
                 &self.mutation_chance_distro,
+                &self.mutate_by_copying_chance_distro,
                 0,
                 self.max_dist_freq,
                 rng,
-                dist,
+                index,
+                &mut genome.dists,
             );
         });
         genome
     }
 }
 
-fn mutate_single_usize<R, D>(
+fn mutate_gene<R, D, E>(
     mutation_chance_distribution: &D,
+    mutate_by_copying_chance_distribution: &E,
     min_value: usize,
     max_value: usize,
     rng: &mut R,
-    litlen: &mut usize,
-) -> bool
-where
+    index: usize,
+    chromosome: &mut [usize],
+) where
     R: Rng + Sized,
     D: Distribution<bool>,
+    E: Distribution<bool>,
 {
     if mutation_chance_distribution.sample(rng) {
-        let old_litlen = *litlen;
-        let new_litlen = rng.gen_range(min_value..=max_value);
-        *litlen = new_litlen;
-        new_litlen != old_litlen
-    } else {
-        false
+        let new_allele = if mutate_by_copying_chance_distribution.sample(rng) {
+            chromosome[rng.gen_range(0..chromosome.len())]
+        } else {
+            rng.gen_range(min_value..=max_value)
+        };
+        chromosome[index] = new_allele;
     }
 }
 
@@ -681,7 +685,7 @@ impl SymbolTableBuilder {
             first_guess,
             max_litlen_freq,
             max_dist_freq,
-            fixed_population
+            fixed_population,
         }
     }
 }
@@ -931,8 +935,14 @@ pub fn lz77_optimal<C: Cache>(
     const SELECTION_RATIO: f64 = 0.35;
     const NUM_INDIVIDUALS_PER_PARENT: usize = 2;
     const MUTATION_RATE: f64 = 0.01;
+    const MUTATION_CHANCE_DIST: Lazy<Bernoulli> =
+        Lazy::new(|| Bernoulli::new(MUTATION_RATE).unwrap());
     const REPLACE_RATIO: f64 = 0.7;
     const CROSSOVER_CHANCE: f64 = 0.6;
+    const MUTATE_BY_COPYING_CHANCE: f64 = 0.5;
+    const CROSSOVER_DIST: Lazy<Bernoulli> = Lazy::new(|| Bernoulli::new(CROSSOVER_CHANCE).unwrap());
+    const MUTATE_BY_COPYING_DIST: Lazy<Bernoulli> =
+        Lazy::new(|| Bernoulli::new(MUTATE_BY_COPYING_CHANCE).unwrap());
 
     let instart = s.blockstart;
     let inend = s.blockend;
@@ -969,10 +979,11 @@ pub fn lz77_optimal<C: Cache>(
             num_individuals_per_parents: NUM_INDIVIDUALS_PER_PARENT,
         })
         .with_crossover(SymbolTableCrossBreeder {
-            crossover_chance_dist: Bernoulli::new(CROSSOVER_CHANCE).unwrap(),
+            crossover_chance_dist: *CROSSOVER_DIST,
         })
         .with_mutation(SymbolTableMutator {
-            mutation_chance_distro: Bernoulli::new(MUTATION_RATE).unwrap(),
+            mutation_chance_distro: *MUTATION_CHANCE_DIST,
+            mutate_by_copying_chance_distro: *MUTATE_BY_COPYING_DIST,
             max_litlen_freq,
             max_dist_freq,
         })
