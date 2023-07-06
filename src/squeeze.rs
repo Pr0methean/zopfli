@@ -491,7 +491,8 @@ fn mutate_gene<R, D, E>(
     E: Distribution<bool>,
 {
     if mutation_chance_distribution.sample(rng) {
-        let new_allele = if mutate_by_copying_chance_distribution.sample(rng) {
+        let new_allele = if max_value - min_value > 1
+            && mutate_by_copying_chance_distribution.sample(rng) {
             chromosome[rng.gen_range(0..chromosome.len())]
         } else {
             rng.gen_range(min_value..=max_value)
