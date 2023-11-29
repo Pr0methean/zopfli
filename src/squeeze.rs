@@ -663,11 +663,28 @@ impl SymbolTableBuilder {
             sorted_dists.reverse();
             fixed_dists.push(sorted_dists);
         }
-        let mut maxed_litlens = [max_litlen_freq; ZOPFLI_NUM_LL];
-        maxed_litlens[256] = 1;
-        fixed_litlens.push(maxed_litlens);
-        let maxed_dists = [max_dist_freq; ZOPFLI_NUM_D];
-        fixed_dists.push(maxed_dists);
+        let mut zero_litlens = [0; ZOPFLI_NUM_LL];
+        zero_litlens[256] = 1;
+        fixed_litlens.push(zero_litlens);
+        if max_litlen_freq > 0 {
+            let mut maxed_litlens = [max_litlen_freq; ZOPFLI_NUM_LL];
+            maxed_litlens[256] = 1;
+            fixed_litlens.push(maxed_litlens);
+            if max_litlen_freq > 1 {
+                let litlens_ones = [1; ZOPFLI_NUM_LL];
+                fixed_litlens.push(litlens_ones);
+            }
+        }
+        let zero_dists = [0; ZOPFLI_NUM_D];
+        fixed_dists.push(zero_dists);
+        if max_dist_freq > 0 {
+            let maxed_dists = [max_dist_freq; ZOPFLI_NUM_D];
+            fixed_dists.push(maxed_dists);
+            if max_dist_freq > 1 {
+                let dists_ones = [1; ZOPFLI_NUM_D];
+                fixed_dists.push(dists_ones);
+            }
+        }
         let mut fixed_population = [SymbolTable::default(); 16];
         fixed_litlens
             .into_iter()
