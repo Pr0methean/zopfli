@@ -575,15 +575,12 @@ where
                 let stats = SymbolStats::from(*a);
                 let pool = &*LZ77_STORE_POOL;
                 let mut currentstore = pool.pull();
-                let mut h = HASH_POOL.pull();
-                lz77_optimal_run(
+                lz77_deterministic_loop(
                     self.lmc.lock().unwrap().deref_mut(),
                     self.data,
                     self.blockstart,
                     self.blockend,
-                    |a, b| get_cost_stat(a, b, &stats),
-                    currentstore.deref_mut(),
-                    &mut h,
+                    currentstore.deref_mut()
                 );
                 let cost =
                     calculate_block_size(&currentstore, 0, currentstore.size(), BlockType::Dynamic);
