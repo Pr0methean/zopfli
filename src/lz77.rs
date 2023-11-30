@@ -82,9 +82,9 @@ impl Lz77Store {
             if origsize == 0 {
                 self.ll_counts.resize(origsize + ZOPFLI_NUM_LL, 0);
             } else {
-                // Append last histogram
-                self.ll_counts
-                    .extend_from_within((origsize - ZOPFLI_NUM_LL)..origsize);
+                let mut last_histogram =
+                    self.ll_counts[(origsize - ZOPFLI_NUM_LL)..origsize].to_vec();
+                self.ll_counts.append(&mut last_histogram);
             }
         }
 
@@ -92,9 +92,9 @@ impl Lz77Store {
             if origsize == 0 {
                 self.d_counts.resize(ZOPFLI_NUM_D, 0);
             } else {
-                // Append last histogram
-                self.d_counts
-                    .extend_from_within((origsize - ZOPFLI_NUM_D)..origsize);
+                let mut last_histogram =
+                    self.d_counts[(origsize - ZOPFLI_NUM_D)..origsize].to_vec();
+                self.d_counts.append(&mut last_histogram);
             }
         }
 
@@ -162,8 +162,16 @@ impl Lz77Store {
         while i < inend {
             h.update(arr, i);
 
-            let longest_match =
-                find_longest_match(lmc, &h, arr, i, inend, instart, ZOPFLI_MAX_MATCH, &mut None);
+            let longest_match = find_longest_match(
+                lmc,
+                &mut h,
+                arr,
+                i,
+                inend,
+                instart,
+                ZOPFLI_MAX_MATCH,
+                &mut None,
+            );
             dist = longest_match.distance;
             leng = longest_match.length;
             lengthscore = get_length_score(leng as i32, dist as i32);
@@ -262,7 +270,7 @@ impl Lz77Store {
                 // should match the length from the path.
                 let longest_match = find_longest_match(
                     lmc,
-                    &h,
+                    &mut h,
                     arr,
                     pos,
                     inend,
@@ -431,7 +439,7 @@ const fn get_match(array: &[u8], scan_offset: usize, match_offset: usize, end: u
 #[allow(clippy::too_many_arguments)]
 pub fn find_longest_match<C: Cache>(
     lmc: &mut C,
-    h: &ZopfliHash,
+    h: &mut ZopfliHash,
     array: &[u8],
     pos: usize,
     size: usize,
@@ -481,7 +489,7 @@ pub fn find_longest_match<C: Cache>(
 }
 
 fn find_longest_match_loop(
-    h: &ZopfliHash,
+    h: &mut ZopfliHash,
     array: &[u8],
     pos: usize,
     size: usize,

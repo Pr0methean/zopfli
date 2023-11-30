@@ -161,16 +161,33 @@ impl<W: Write> Drop for DeflateEncoder<W> {
     }
 }
 
-// Boilerplate to make latest Rustdoc happy: https://github.com/rust-lang/rust/issues/117796
-#[cfg(all(doc, feature = "std"))]
-impl<W: crate::io::Write> std::io::Write for DeflateEncoder<W> {
-    fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
-        unimplemented!()
-    }
+/// Convenience function to efficiently compress data in DEFLATE format
+/// from an arbitrary source to an arbitrary destination.
+pub fn deflate<R: std::io::Read, W: Write>(
+    options: Options,
+    btype: BlockType,
+    mut in_data: R,
+    out: W,
+) -> Result<(), Error> {
+    /// A block structure of huge, non-smart, blocks to divide the input into, to allow
+    /// operating on huge files without exceeding memory, such as the 1GB wiki9 corpus.
+    /// The whole compression algorithm, including the smarter block splitting, will
+    /// be executed independently on each huge block.
+    /// Dividing into huge blocks hurts compression, but not much relative to the size.
+    /// This must be equal or greater than `ZOPFLI_WINDOW_SIZE`.
+    const ZOPFLI_MASTER_BLOCK_SIZE: usize = 1_000_000;
 
-    fn flush(&mut self) -> std::io::Result<()> {
-        unimplemented!()
-    }
+    // Wrap the encoder with a buffer to guarantee the data is compressed in big chunks,
+    // which is necessary for decent performance and good compression ratio
+    let mut deflater = std::io::BufWriter::with_capacity(
+        ZOPFLI_MASTER_BLOCK_SIZE,
+        DeflateEncoder::new(options, btype, out),
+    );
+
+    std::io::copy(&mut in_data, &mut deflater)?;
+    deflater.into_inner()?.finish()?;
+
+    Ok(())
 }
 
 /// Deflate a part, to allow for chunked, streaming compression with [`DeflateEncoder`].
@@ -458,13 +475,7 @@ fn calculate_block_symbol_size(
     } else {
         let (ll_counts, d_counts) = lz77.get_histogram(lstart, lend);
         calculate_block_symbol_size_given_counts(
-            &*ll_counts,
-            &*d_counts,
-            ll_lengths,
-            d_lengths,
-            lz77,
-            lstart,
-            lend,
+            &*ll_counts, &*d_counts, ll_lengths, d_lengths, lz77, lstart, lend,
         )
     }
 }
@@ -983,13 +994,7 @@ fn get_dynamic_lengths(lz77: &Lz77Store, lstart: usize, lend: usize) -> (f64, Ve
     patch_distance_codes_for_buggy_decoders(&mut d_lengths[..]);
 
     try_optimize_huffman_for_rle(
-        lz77,
-        lstart,
-        lend,
-        &*ll_counts,
-        &*d_counts,
-        ll_lengths,
-        d_lengths,
+        lz77, lstart, lend, &*ll_counts, &*d_counts, ll_lengths, d_lengths,
     )
 }
 

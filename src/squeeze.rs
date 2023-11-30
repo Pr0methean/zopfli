@@ -563,7 +563,7 @@ impl Fitness for FloatAsFitness {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 struct ZopfliGaState<'a> {
     pub best: Arc<RwLock<ZopfliOutput>>,
     pub score_cache: Arc<MokaCache<SymbolTable, f64>>,
@@ -579,20 +579,22 @@ impl <'a> FitnessFunction<SymbolTable, FloatAsFitness> for &'a ZopfliGaState<'a>
             .get_with(*a, || {
                 let read_best = self.best.read().unwrap();
                 if read_best.stats == *a {
-                    return (-read_best.cost).into()
+                    return (-read_best.cost).into();
                 }
                 let best_before = read_best.cost;
                 drop(read_best);
                 let stats = SymbolStats::from(*a);
                 let pool = &*LZ77_STORE_POOL;
                 let mut currentstore = pool.pull();
+                let mut lmc = self.lmc.lock().unwrap();
                 lz77_deterministic_loop(
-                    self.lmc.lock().unwrap().deref_mut(),
+                    lmc.deref_mut(),
                     self.data,
                     self.blockstart,
                     self.blockend,
                     currentstore.deref_mut()
                 );
+                drop(lmc);
                 let cost =
                     calculate_block_size(&currentstore, 0, currentstore.size(), BlockType::Dynamic);
                 if cost < best_before {
@@ -976,9 +978,12 @@ pub fn lz77_optimal<C: Cache>(
     let max_dist_freq = *best_before_ga.stats.dists.iter().max().unwrap();
     let genome_builder =
         SymbolTableBuilder::new(best_stats_before_ga, max_dist_freq, max_litlen_freq);
+    let mut score_cache = MokaCache::new(SCORE_CACHE_SIZE);
+    let mut prev_best = -best_before_ga.cost;
+    score_cache.insert(best_before_ga.stats, prev_best);
     let s = ZopfliGaState {
-        best: Arc::new(RwLock::new(best_before_ga)),
-        score_cache: MokaCache::new(SCORE_CACHE_SIZE).into(),
+        best: RwLock::new(best_before_ga).into(),
+        score_cache: score_cache.into(),
         lmc: Arc::new(Mutex::new(ZopfliLongestMatchCache::new(inend - instart))),
         data: &in_data,
         blockstart: instart,
@@ -1012,7 +1017,6 @@ pub fn lz77_optimal<C: Cache>(
             max_iterations,
         ))
         .build();
-    let mut prev_best = f64::NEG_INFINITY;
     loop {
         match genetic_algorithm_sim.step() {
             Ok(SimResult::Intermediate(step)) => {
@@ -1069,13 +1073,14 @@ fn lz77_deterministic_loop<C: Cache>(
     inend: usize,
     outputstore: &mut Lz77Store,
 ) -> ZopfliOutput {
-    let mut last_cost = f64::INFINITY;
     let mut lz77_store = LZ77_STORE_POOL.pull();
     let current_store = lz77_store.deref_mut();
     let mut best_cost =
         calculate_block_size(&outputstore, 0, outputstore.size(), BlockType::Dynamic);
+    let mut last_cost = best_cost;
     let mut stats = SymbolStats::default();
     stats.get_statistics(&outputstore);
+    current_store.clone_from(&outputstore);
     let mut best_stats = stats;
     let hash_pool = &*HASH_POOL;
     let mut h = hash_pool.pull();
