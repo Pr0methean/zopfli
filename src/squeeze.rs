@@ -598,6 +598,15 @@ impl <'a> FitnessFunction<SymbolTable, FloatAsFitness> for &'a ZopfliGaState<'a>
                 let pool = &*LZ77_STORE_POOL;
                 let mut currentstore = pool.pull();
                 let mut lmc = self.lmc.lock().unwrap();
+                lz77_optimal_run(
+                    lmc.deref_mut(),
+                    self.data,
+                    self.blockstart,
+                    self.blockend,
+                    |a, b| get_cost_stat(a, b, &stats),
+                    currentstore.deref_mut(),
+                    &mut ZopfliHash::new(),
+                );
                 lz77_deterministic_loop(
                     lmc.deref_mut(),
                     self.data,
@@ -989,7 +998,7 @@ pub fn lz77_optimal(
     let genome_builder =
         SymbolTableBuilder::new(best_stats_before_ga, max_dist_freq, max_litlen_freq);
     let mut score_cache = MokaCache::new(SCORE_CACHE_SIZE);
-    let mut prev_best = f64::NEG_INFINITY; // FIXME: -best_before_ga.cost;
+    let mut prev_best = -best_before_ga.cost;
     // score_cache.insert(best_before_ga.stats, prev_best);
     let s = ZopfliGaState {
         best: RwLock::new(best_before_ga).into(),
