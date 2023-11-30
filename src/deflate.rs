@@ -1204,7 +1204,6 @@ fn blocksplit_attempt<W: Write>(
     let mut last = instart;
     for &item in &splitpoints_uncompressed {
         let store = lz77_optimal(
-            &mut ZopfliLongestMatchCache::new(item - last),
             in_data,
             last,
             item,
@@ -1225,7 +1224,6 @@ fn blocksplit_attempt<W: Write>(
     }
 
     let store = lz77_optimal(
-        &mut ZopfliLongestMatchCache::new(inend - last),
         in_data,
         last,
         inend,
