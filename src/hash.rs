@@ -1,14 +1,9 @@
-#[cfg(not(feature = "std"))]
-use std::alloc::{alloc, Layout};
-#[cfg(feature = "std")]
-use std::{
-    alloc::{alloc, Layout},
+use alloc::{
+    alloc::{alloc, handle_alloc_error, Layout},
     boxed::Box,
 };
-
+use core::ptr::{addr_of, addr_of_mut, NonNull};
 use lockfree_object_pool::LinearObjectPool;
-use once_cell::sync::Lazy;
-#[cfg(feature = "std")]
 use once_cell::sync::Lazy;
 
 use crate::util::{ZOPFLI_MIN_MATCH, ZOPFLI_WINDOW_MASK, ZOPFLI_WINDOW_SIZE};
@@ -40,7 +35,7 @@ impl HashThing {
         let hashval = self.val;
         let index = self.val as usize;
         let head_index = self.head[index];
-        let prev = if head_index != -1
+        let prev = if head_index >= 0
             && self.prev_and_hashval[head_index as usize]
                 .hashval
                 .map_or(false, |hv| hv == self.val)
@@ -65,48 +60,60 @@ pub struct ZopfliHash {
     pub same: [u16; ZOPFLI_WINDOW_SIZE], /* Amount of repetitions of same byte after this .*/
 }
 
-const EMPTY_ZOPFLI_HASH: Lazy<Box<ZopfliHash>> = Lazy::new(|| {
-    let mut hash = unsafe {
-        let layout = Layout::new::<ZopfliHash>();
-        let ptr = alloc(layout) as *mut ZopfliHash;
-        if ptr.is_null() {
-            panic!("Failed to allocate a ZopfliHash on heap");
-        }
-        Box::from_raw(ptr)
-    };
-    for i in 0..ZOPFLI_WINDOW_SIZE {
-        hash.hash1.prev_and_hashval[i].prev = i as u16;
-        hash.hash2.prev_and_hashval[i].prev = i as u16;
-        hash.hash1.prev_and_hashval[i].hashval = None;
-        hash.hash2.prev_and_hashval[i].hashval = None;
-    }
-    hash.hash1.head = [-1; 65536];
-    hash.hash2.head = [-1; 65536];
-    hash.hash1.val = 0;
-    hash.hash2.val = 0;
-    hash.same = [0; ZOPFLI_WINDOW_SIZE];
-    hash
-});
-
 impl ZopfliHash {
-    #[cfg(feature = "std")]
     pub fn new() -> Box<ZopfliHash> {
-        EMPTY_ZOPFLI_HASH.clone()
+        const LAYOUT: Layout = Layout::new::<ZopfliHash>();
+
+        let ptr = NonNull::new(unsafe { alloc(LAYOUT) } as *mut ZopfliHash)
+            .unwrap_or_else(|| handle_alloc_error(LAYOUT));
+
+        unsafe {
+            Self::init(ptr);
+            Box::from_raw(ptr.as_ptr())
+        }
     }
 
-    #[cfg(not(feature = "std"))]
-    pub fn new() -> Box<ZopfliHash> {
-        EMPTY_ZOPFLI_HASH.clone()
+    /// Initializes the [`ZopfliHash`] instance pointed by `hash` to an initial state.
+    ///
+    /// ## Safety
+    /// `hash` must point to aligned, valid memory for writes.
+    unsafe fn init(hash: NonNull<Self>) {
+        let hash = hash.as_ptr();
+
+        // SAFETY: addr_of(_mut) macros are used to avoid creating intermediate references, which
+        //         are undefined behavior when data is uninitialized. Note that it also is UB to
+        //         assume that integer values and arrays can be read after allocating their memory:
+        //         the allocator returns valid, but uninitialized pointers that are not guaranteed
+        //         to hold a fixed bit pattern (c.f. core::mem::MaybeUnit docs and
+        //         https://doc.rust-lang.org/std/ptr/index.html#safety).
+
+        for i in 0..ZOPFLI_WINDOW_SIZE {
+            // Arrays are guaranteed to be laid out with their elements placed in consecutive
+            // memory positions: https://doc.rust-lang.org/reference/type-layout.html#array-layout.
+            // Therefore, a pointer to an array has the same address as the pointer to its first
+            // element, and adding size_of::<N>() bytes to that address yields the address of the
+            // second element, and so on.
+            let prev_and_hashval =
+                (addr_of_mut!((*hash).hash1.prev_and_hashval) as *mut SmallerHashThing).add(i);
+            addr_of_mut!((*prev_and_hashval).prev).write(i as u16);
+            addr_of_mut!((*prev_and_hashval).hashval).write(None);
+        }
+
+        // Rust signed integers are guaranteed to be represented in two's complement notation:
+        // https://doc.rust-lang.org/reference/types/numeric.html#integer-types
+        // In this notation, -1 is expressed as an all-ones value. Therefore, writing
+        // size_of::<[i16; N]> all-ones bytes initializes all of them to -1.
+        addr_of_mut!((*hash).hash1.head).write_bytes(0xFF, 1);
+        addr_of_mut!((*hash).hash1.val).write(0);
+
+        addr_of_mut!((*hash).hash2).copy_from_nonoverlapping(addr_of!((*hash).hash1), 1);
+
+        // Zero-initializes all the array elements
+        addr_of_mut!((*hash).same).write_bytes(0, 1);
     }
 
-    #[cfg(feature = "std")]
     pub fn reset(&mut self) {
-        *self = **EMPTY_ZOPFLI_HASH;
-    }
-
-    #[cfg(not(feature = "std"))]
-    pub fn reset(&mut self) {
-        *self = **EMPTY_ZOPFLI_HASH;
+        unsafe { Self::init(NonNull::new(self).unwrap()) }
     }
 
     pub fn warmup(&mut self, arr: &[u8], pos: usize, end: usize) {

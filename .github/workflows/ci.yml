@@ -11,6 +11,7 @@ on:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         conf:
           - stable
@@ -34,7 +35,7 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install ${{ matrix.toolchain }}
         uses: dtolnay/rust-toolchain@v1
@@ -55,6 +56,10 @@ jobs:
 
       - name: Run tests
         run: make zopfli && make test
+
+      - name: Run tests (no-std)
+        if: matrix.conf == 'nightly'
+        run: cargo test --release --no-default-features --features nightly
 
       - name: Generate documentation
         if: matrix.conf == 'nightly'

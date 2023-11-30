@@ -12,8 +12,8 @@
 //! This crate exposes the following features. You can enable or disable them in your `Cargo.toml`
 //! as needed.
 //!
-//! - `gzip` (enabled by default): enables support for compression in the gzip format. Implies `std`.
-//! - `zlib` (enabled by default): enables support for compression in the Zlib format. Implies `std`.
+//! - `gzip` (enabled by default): enables support for compression in the gzip format.
+//! - `zlib` (enabled by default): enables support for compression in the Zlib format.
 //! - `std` (enabled by default): enables linking against the Rust standard library. When not enabled,
 //!                               the crate is built with the `#![no_std]` attribute and can be used
 //!                               in any environment where [`alloc`](https://doc.rust-lang.org/alloc/)
@@ -25,6 +25,7 @@
 //!              Currently, this feature improves rustdoc generation and enables the namesake feature
 //!              on `crc32fast` and `simd-adler32`, but this may change in the future.
 
+#![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(
     feature = "nightly",
     feature(doc_auto_cfg),
@@ -32,13 +33,16 @@
     feature(core_intrinsics)
 )]
 
-#[macro_use]
+#[cfg_attr(not(feature = "std"), macro_use)]
 extern crate alloc;
-extern crate core;
 
 pub use deflate::{BlockType, DeflateEncoder};
-#[cfg(test)]
+#[cfg(feature = "gzip")]
+pub use gzip::GzipEncoder;
+#[cfg(all(test, feature = "std"))]
 use proptest::prelude::*;
+#[cfg(feature = "zlib")]
+pub use zlib::ZlibEncoder;
 
 mod blocksplitter;
 mod cache;
@@ -46,11 +50,13 @@ mod deflate;
 #[cfg(feature = "gzip")]
 mod gzip;
 mod hash;
-#[cfg(doc)]
+#[cfg(any(doc, not(feature = "std")))]
 mod io;
 mod iter;
 mod katajainen;
 mod lz77;
+#[cfg(not(feature = "std"))]
+mod math;
 mod squeeze;
 mod symbols;
 mod tree;
@@ -59,17 +65,17 @@ mod util;
 mod zlib;
 
 use core::num::NonZeroU64;
-#[cfg(not(doc))]
+#[cfg(all(not(doc), feature = "std"))]
 use std::io::{Error, Write};
 
-#[cfg(doc)]
+#[cfg(any(doc, not(feature = "std")))]
 pub use io::{Error, ErrorKind, Write};
 
 use crate::hash::HASH_POOL;
 
 /// Options for the Zopfli compression algorithm.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[cfg_attr(all(test, feature = "std"), derive(proptest_derive::Arbitrary))]
 pub struct Options {
     /// Maximum amount of times to rerun forward and backward pass to optimize LZ77
     /// compression cost.
@@ -78,15 +84,17 @@ pub struct Options {
     ///
     /// Default value: 15.
     #[cfg_attr(
-        test,
+        all(test, feature = "std"),
         proptest(
-            strategy = "(1..=10u64).prop_map(|iteration_count| NonZeroU64::new(iteration_count))"
+            strategy = "(1..=10u64).prop_map(|iteration_count| NonZeroU64::new(iteration_count).unwrap())"
         )
     )]
-    pub iteration_count: Option<NonZeroU64>,
+    pub iteration_count: NonZeroU64,
     /// Stop after rerunning forward and backward pass this many times without finding
     /// a smaller representation of the block.
-    pub iterations_without_improvement: Option<NonZeroU64>,
+    ///
+    /// Default value: practically infinite (maximum `u64` value)
+    pub iterations_without_improvement: NonZeroU64,
     /// Maximum amount of blocks to split into (0 for unlimited, but this can give
     /// extreme results that hurt compression on some files).
     ///
@@ -97,8 +105,8 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Options {
         Options {
-            iteration_count: Some(NonZeroU64::new(15).unwrap()),
-            iterations_without_improvement: None,
+            iteration_count: NonZeroU64::new(15).unwrap(),
+            iterations_without_improvement: NonZeroU64::new(u64::MAX).unwrap(),
             maximum_block_splits: 15,
         }
     }
@@ -106,6 +114,7 @@ impl Default for Options {
 
 /// The output file format to use to store data compressed with Zopfli.
 #[derive(Debug, Copy, Clone)]
+#[cfg(feature = "std")]
 pub enum Format {
     /// The gzip file format, as defined in
     /// [RFC 1952](https://datatracker.ietf.org/doc/html/rfc1952).
@@ -133,18 +142,32 @@ pub enum Format {
 
 /// Compresses data from a source with the Zopfli algorithm, using the specified
 /// options, and writes the result to a sink in the defined output format.
+#[cfg(feature = "std")]
 pub fn compress<R: std::io::Read, W: Write>(
-    options: &Options,
-    output_format: &Format,
-    in_data: R,
+    options: Options,
+    output_format: Format,
+    mut in_data: R,
     out: W,
 ) -> Result<(), Error> {
     match output_format {
         #[cfg(feature = "gzip")]
-        Format::Gzip => gzip::gzip_compress(*options, in_data, out),
+        Format::Gzip => {
+            let mut gzip_encoder = GzipEncoder::new_buffered(options, BlockType::Dynamic, out)?;
+            std::io::copy(&mut in_data, &mut gzip_encoder)?;
+            gzip_encoder.into_inner()?.finish().map(|_| ())
+        }
         #[cfg(feature = "zlib")]
-        Format::Zlib => zlib::zlib_compress(*options, in_data, out),
-        Format::Deflate => deflate::deflate(*options, BlockType::Dynamic, in_data, out),
+        Format::Zlib => {
+            let mut zlib_encoder = ZlibEncoder::new_buffered(options, BlockType::Dynamic, out)?;
+            std::io::copy(&mut in_data, &mut zlib_encoder)?;
+            zlib_encoder.into_inner()?.finish().map(|_| ())
+        }
+        Format::Deflate => {
+            let mut deflate_encoder =
+                DeflateEncoder::new_buffered(options, BlockType::Dynamic, out);
+            std::io::copy(&mut in_data, &mut deflate_encoder)?;
+            deflate_encoder.into_inner()?.finish().map(|_| ())
+        }
     }
 }
 
@@ -153,7 +176,7 @@ pub fn prewarm_object_pools() {
     HASH_POOL.pull();
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "std"))]
 mod test {
     use std::io;
 

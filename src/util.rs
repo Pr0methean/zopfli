@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use std::io::{Error, ErrorKind, Read};
 
 /// Number of distinct literal/length symbols in DEFLATE
@@ -9,6 +10,14 @@ pub const ZOPFLI_NUM_D: usize = 32;
 /// maximum possible by the deflate spec. Anything less hurts compression more than
 /// speed.
 pub const ZOPFLI_WINDOW_SIZE: usize = 32768;
+/// A block structure of huge, non-smart, blocks to divide the input into, to allow
+/// operating on huge files without exceeding memory, such as the 1GB wiki9 corpus.
+/// The whole compression algorithm, including the smarter block splitting, will
+/// be executed independently on each huge block.
+/// Dividing into huge blocks hurts compression, but not much relative to the size.
+/// This must be equal or greater than `ZOPFLI_WINDOW_SIZE`.
+#[cfg(feature = "std")]
+pub const ZOPFLI_MASTER_BLOCK_SIZE: usize = 1_000_000;
 
 /// The window mask used to wrap indices into the window. This is why the
 /// window size must be a power of two.
@@ -88,5 +97,13 @@ impl<R: Read, H: Hasher> Read for HashingAndCountingRead<'_, R, H> {
             }
             Err(err) => Err(err),
         }
+    }
+}
+
+#[inline]
+pub fn boxed_array<T: Clone, const N: usize>(element: T) -> Box<[T; N]> {
+    match vec![element; N].into_boxed_slice().try_into() {
+        Ok(x) => x,
+        Err(_) => unreachable!(),
     }
 }

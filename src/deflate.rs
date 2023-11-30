@@ -1,5 +1,5 @@
 use alloc::vec::Vec;
-use core::{cmp, iter, num::NonZeroU64};
+use core::{cmp, iter};
 
 use log::{debug, log_enabled};
 
@@ -8,7 +8,7 @@ use crate::{
     cache::ZopfliLongestMatchCache,
     iter::ToFlagLastIterator,
     katajainen::length_limited_code_lengths,
-    lz77::{LitLen, Lz77Store, ZopfliBlockState},
+    lz77::{LitLen, Lz77Store},
     squeeze::{lz77_optimal, lz77_optimal_fixed},
     symbols::{
         get_dist_extra_bits, get_dist_extra_bits_value, get_dist_symbol,
@@ -28,9 +28,10 @@ use crate::{
 /// backreference window. As a consequence, frequent short writes may cause more
 /// DEFLATE blocks to be emitted with less optimal Huffman trees, which can hurt
 /// compression and runtime. If they are a concern, short writes can be conveniently
-/// dealt with by wrapping this encoder with a [`BufWriter`](std::io::BufWriter). An
-/// adequate write size would be >32 KiB, which allows the second complete chunk to
-/// leverage a full-sized backreference window.
+/// dealt with by wrapping this encoder with a [`BufWriter`](std::io::BufWriter), as done
+/// by the [`new_buffered`](DeflateEncoder::new_buffered) method. An adequate write size
+/// would be >32 KiB, which allows the second complete chunk to leverage a full-sized
+/// backreference window.
 pub struct DeflateEncoder<W: Write> {
     options: Options,
     btype: BlockType,
@@ -54,6 +55,18 @@ impl<W: Write> DeflateEncoder<W> {
         }
     }
 
+    /// Creates a new Zopfli DEFLATE encoder that operates according to the
+    /// specified options and is wrapped with a buffer to guarantee that
+    /// data is compressed in large chunks, which is necessary for decent
+    /// performance and good compression ratio.
+    #[cfg(feature = "std")]
+    pub fn new_buffered(options: Options, btype: BlockType, sink: W) -> std::io::BufWriter<Self> {
+        std::io::BufWriter::with_capacity(
+            crate::util::ZOPFLI_MASTER_BLOCK_SIZE,
+            Self::new(options, btype, sink),
+        )
+    }
+
     /// Encodes any pending chunks of data and writes them to the sink,
     /// consuming the encoder and returning the wrapped sink. The sink
     /// will have received a complete DEFLATE stream when this method
@@ -63,7 +76,7 @@ impl<W: Write> DeflateEncoder<W> {
     /// dropped, but explicitly finishing it with this method allows
     /// handling I/O errors.
     pub fn finish(mut self) -> Result<W, Error> {
-        self._finish().map(|writer| writer.unwrap())
+        self._finish().map(|sink| sink.unwrap())
     }
 
     /// Compresses the chunk stored at `window_and_chunk`. This includes
@@ -148,33 +161,16 @@ impl<W: Write> Drop for DeflateEncoder<W> {
     }
 }
 
-/// Convenience function to efficiently compress data in DEFLATE format
-/// from an arbitrary source to an arbitrary destination.
-pub fn deflate<R: std::io::Read, W: Write>(
-    options: Options,
-    btype: BlockType,
-    mut in_data: R,
-    out: W,
-) -> Result<(), Error> {
-    /// A block structure of huge, non-smart, blocks to divide the input into, to allow
-    /// operating on huge files without exceeding memory, such as the 1GB wiki9 corpus.
-    /// The whole compression algorithm, including the smarter block splitting, will
-    /// be executed independently on each huge block.
-    /// Dividing into huge blocks hurts compression, but not much relative to the size.
-    /// This must be equal or greater than `ZOPFLI_WINDOW_SIZE`.
-    const ZOPFLI_MASTER_BLOCK_SIZE: usize = 1_000_000;
+// Boilerplate to make latest Rustdoc happy: https://github.com/rust-lang/rust/issues/117796
+#[cfg(all(doc, feature = "std"))]
+impl<W: crate::io::Write> std::io::Write for DeflateEncoder<W> {
+    fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+        unimplemented!()
+    }
 
-    // Wrap the encoder with a buffer to guarantee the data is compressed in big chunks,
-    // which is necessary for decent performance and good compression ratio
-    let mut deflater = std::io::BufWriter::with_capacity(
-        ZOPFLI_MASTER_BLOCK_SIZE,
-        DeflateEncoder::new(options, btype, out),
-    );
-
-    std::io::copy(&mut in_data, &mut deflater)?;
-    deflater.into_inner()?.finish()?;
-
-    Ok(())
+    fn flush(&mut self) -> std::io::Result<()> {
+        unimplemented!()
+    }
 }
 
 /// Deflate a part, to allow for chunked, streaming compression with [`DeflateEncoder`].
@@ -462,7 +458,13 @@ fn calculate_block_symbol_size(
     } else {
         let (ll_counts, d_counts) = lz77.get_histogram(lstart, lend);
         calculate_block_symbol_size_given_counts(
-            &ll_counts, &d_counts, ll_lengths, d_lengths, lz77, lstart, lend,
+            &*ll_counts,
+            &*d_counts,
+            ll_lengths,
+            d_lengths,
+            lz77,
+            lstart,
+            lend,
         )
     }
 }
@@ -975,13 +977,19 @@ fn get_dynamic_lengths(lz77: &Lz77Store, lstart: usize, lend: usize) -> (f64, Ve
     let (mut ll_counts, d_counts) = lz77.get_histogram(lstart, lend);
     ll_counts[256] = 1; /* End symbol. */
 
-    let ll_lengths = length_limited_code_lengths(&ll_counts, 15);
-    let mut d_lengths = length_limited_code_lengths(&d_counts, 15);
+    let ll_lengths = length_limited_code_lengths(&*ll_counts, 15);
+    let mut d_lengths = length_limited_code_lengths(&*d_counts, 15);
 
     patch_distance_codes_for_buggy_decoders(&mut d_lengths[..]);
 
     try_optimize_huffman_for_rle(
-        lz77, lstart, lend, &ll_counts, &d_counts, ll_lengths, d_lengths,
+        lz77,
+        lstart,
+        lend,
+        &*ll_counts,
+        &*d_counts,
+        ll_lengths,
+        d_lengths,
     )
 }
 
@@ -1190,12 +1198,13 @@ fn blocksplit_attempt<W: Write>(
 
     let mut last = instart;
     for &item in &splitpoints_uncompressed {
-        let s = ZopfliBlockState::new(options, in_data, last, item);
         let store = lz77_optimal(
-            s,
+            &mut ZopfliLongestMatchCache::new(item - last),
             in_data,
-            options.iteration_count.map(NonZeroU64::get),
-            options.iterations_without_improvement.map(NonZeroU64::get),
+            last,
+            item,
+            options.iteration_count.get(),
+            options.iterations_without_improvement.get(),
         );
         totalcost += calculate_block_size_auto_type(&store, 0, store.size());
 
@@ -1210,13 +1219,13 @@ fn blocksplit_attempt<W: Write>(
         last = item;
     }
 
-    let s = ZopfliBlockState::new(options, in_data, last, inend);
-
     let store = lz77_optimal(
-        s,
+        &mut ZopfliLongestMatchCache::new(inend - last),
         in_data,
-        options.iteration_count.map(NonZeroU64::get),
-        options.iterations_without_improvement.map(NonZeroU64::get),
+        last,
+        inend,
+        options.iteration_count.get(),
+        options.iterations_without_improvement.get(),
     );
     totalcost += calculate_block_size_auto_type(&store, 0, store.size());
 

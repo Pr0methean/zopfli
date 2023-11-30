@@ -15,6 +15,7 @@ use crate::{
 // the same position.
 // Uses large amounts of memory, since it has to remember the distance belonging
 // to every possible shorter-than-the-best length (the so called "sublen" array).
+#[derive(Clone)]
 pub struct ZopfliLongestMatchCache {
     length: Vec<u16>,
     dist: Vec<u16>,

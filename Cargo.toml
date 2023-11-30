@@ -1,6 +1,6 @@
 [package]
 name = "zopfli"
-version = "0.7.4"
+version = "0.8.0"
 description = "A Rust implementation of the Zopfli compression algorithm."
 license = "Apache-2.0"
 keywords = ["compression"]
@@ -14,31 +14,32 @@ rust-version = "1.70"
 
 [dependencies]
 crc32fast = { version = "1.3.2", default-features = false, optional = true }
-simd-adler32 = { version = "0.3.5", default-features = false, optional = true }
+simd-adler32 = { version = "0.3.7", default-features = false, optional = true }
 typed-arena = { version = "2.0.2", default-features = false }
-log = "0.4.19"
+log = "0.4.20"
 lockfree-object-pool = "0.1.4"
 once_cell = "1.18.0"
 genevo = "0.7.1"
 ordered-float = "3.7.0"
 smallvec = "1.10.0"
 rand = "0.8.5"
-moka = { version = "0.11.2", features = ["sync"] }
+moka = { version = "0.12.1", features = ["sync"] }
 
 [dev-dependencies]
-proptest = "1.2.0"
-proptest-derive = "0.3.0"
+proptest = "1.4.0"
+proptest-derive = "0.4.0"
 miniz_oxide = "0.7.1"
 
 [features]
-default = ["gzip", "zlib"]
+default = ["std", "gzip", "zlib"]
 gzip = ["dep:crc32fast"]
 zlib = ["dep:simd-adler32"]
 nightly = ["crc32fast?/nightly", "simd-adler32?/nightly"]
+std = []
 
 [[bin]]
 name = "zopfli"
-required-features = ["gzip", "zlib"]
+required-features = ["std", "gzip", "zlib"]
 
 [profile.release]
 debug = true

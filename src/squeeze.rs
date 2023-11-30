@@ -13,7 +13,8 @@ use core::{
     fmt::{Debug, Display, Formatter},
     ops::DerefMut,
 };
-use std::{iter, ops::Deref};
+use std::{iter};
+use std::sync::{Arc, Mutex, RwLock};
 
 use genevo::{
     algorithm::EvaluatedPopulation,
@@ -33,17 +34,25 @@ use rand::{
     distributions::{Bernoulli, Distribution, WeightedIndex},
     seq::SliceRandom,
 };
+use moka::sync::Cache as MokaCache;
 
 use crate::{
     cache::Cache,
     deflate::{calculate_block_size, BlockType},
     hash::{ZopfliHash, HASH_POOL},
-    lz77::{find_longest_match, LitLen, Lz77Store, ZopfliBlockState, ZopfliOutput},
+    lz77::{find_longest_match, LitLen, Lz77Store},
     symbols::{get_dist_extra_bits, get_dist_symbol, get_length_extra_bits, get_length_symbol},
     util::{ZOPFLI_MAX_MATCH, ZOPFLI_NUM_D, ZOPFLI_NUM_LL, ZOPFLI_WINDOW_MASK, ZOPFLI_WINDOW_SIZE},
 };
+use crate::cache::ZopfliLongestMatchCache;
+use crate::lz77::ZopfliOutput;
 
 const K_INV_LOG2: f64 = core::f64::consts::LOG2_E; // 1.0 / log(2.0)
+const SCORE_CACHE_SIZE: u64 = 16 * 1024;
+
+#[cfg(not(feature = "std"))]
+#[allow(unused_imports)] // False-positive
+use crate::math::F64MathExt;
 
 static LZ77_STORE_POOL: Lazy<LinearObjectPool<Lz77Store>> =
     Lazy::new(|| LinearObjectPool::new(Lz77Store::new, Lz77Store::reset));
@@ -554,23 +563,25 @@ impl Fitness for FloatAsFitness {
     }
 }
 
-impl<'a, C> FitnessFunction<SymbolTable, FloatAsFitness> for &'a ZopfliBlockState<'a, C>
-where
-    C: Cache,
-{
+#[derive(Clone, Debug)]
+struct ZopfliGaState<'a> {
+    pub best: Arc<RwLock<ZopfliOutput>>,
+    pub score_cache: Arc<MokaCache<SymbolTable, f64>>,
+    pub lmc: Arc<Mutex<ZopfliLongestMatchCache>>,
+    pub data: &'a [u8],
+    pub blockstart: usize,
+    pub blockend: usize
+}
+
+impl <'a> FitnessFunction<SymbolTable, FloatAsFitness> for &'a ZopfliGaState<'a> {
     fn fitness_of(&self, a: &SymbolTable) -> FloatAsFitness {
         self.score_cache
             .get_with(*a, || {
                 let read_best = self.best.read().unwrap();
-                let best_before = match read_best.deref() {
-                    None => f64::INFINITY,
-                    Some(output) => {
-                        if output.stats == *a {
-                            return (-output.cost).into();
-                        }
-                        output.cost
-                    }
-                };
+                if read_best.stats == *a {
+                    return (-read_best.cost).into()
+                }
+                let best_before = read_best.cost;
                 drop(read_best);
                 let stats = SymbolStats::from(*a);
                 let pool = &*LZ77_STORE_POOL;
@@ -587,23 +598,12 @@ where
                 if cost < best_before {
                     let mut best = self.best.write().unwrap();
                     let best = best.deref_mut();
-                    match best {
-                        None => {
-                            *best = Some(ZopfliOutput {
-                                stored: currentstore.clone(),
-                                stats: stats.table,
-                                cost,
-                            })
-                        }
-                        Some(best_after) => {
-                            if cost < best_after.cost {
-                                *best_after = ZopfliOutput {
-                                    stored: currentstore.clone(),
-                                    stats: stats.table,
-                                    cost,
-                                };
-                            }
-                        }
+                    if cost < best.cost {
+                        *best = ZopfliOutput {
+                            stored: currentstore.clone(),
+                            stats: stats.table,
+                            cost,
+                        };
                     }
                 }
                 -cost
@@ -629,7 +629,7 @@ where
 #[derive(Debug)]
 pub struct SymbolTableBuilder {
     first_guess: SymbolTable,
-    fixed_population: [SymbolTable; 16],
+    fixed_population: Vec<SymbolTable>,
     max_litlen_freq: usize,
     max_dist_freq: usize,
 }
@@ -685,8 +685,7 @@ impl SymbolTableBuilder {
                 fixed_dists.push(dists_ones);
             }
         }
-        let mut fixed_population = [SymbolTable::default(); 16];
-        fixed_litlens
+        let fixed_population: Vec<_> = fixed_litlens
             .into_iter()
             .flat_map(|litlens| {
                 fixed_dists.iter().map(move |dists| SymbolTable {
@@ -694,8 +693,7 @@ impl SymbolTableBuilder {
                     dists: *dists,
                 })
             })
-            .enumerate()
-            .for_each(|(index, value)| fixed_population[index] = value);
+            .collect();
         SymbolTableBuilder {
             first_guess,
             max_litlen_freq,
@@ -790,13 +788,13 @@ where
 struct GenerationsWithoutImprovementLimiter {
     current_best: f64,
     generations_without_improvement: u64,
-    max_generations_without_improvement: Option<u64>,
+    max_generations_without_improvement: u64,
     generations: u64,
-    max_generations: Option<u64>,
+    max_generations: u64,
 }
 
 impl GenerationsWithoutImprovementLimiter {
-    fn new(max_generations_without_improvement: Option<u64>, max_generations: Option<u64>) -> Self {
+    fn new(max_generations_without_improvement: u64, max_generations: u64) -> Self {
         GenerationsWithoutImprovementLimiter {
             current_best: f64::NEG_INFINITY,
             generations_without_improvement: 0,
@@ -814,9 +812,7 @@ where
 {
     fn evaluate(&mut self, state: &State<A>) -> StopFlag {
         self.generations += 1;
-        if self
-            .max_generations
-            .is_some_and(|max_gens| self.generations >= max_gens)
+        if self.generations >= self.max_generations
         {
             StopFlag::StopNow("Maximum generations reached".into())
         } else {
@@ -829,9 +825,7 @@ where
                 StopFlag::Continue
             } else {
                 self.generations_without_improvement += 1;
-                if self
-                    .max_generations_without_improvement
-                    .is_some_and(|max_gens| max_gens <= self.generations_without_improvement)
+                if self.generations_without_improvement >= self.max_generations_without_improvement
                 {
                     StopFlag::StopNow("Generations-without-improvement limit reached".into())
                 } else {
@@ -941,10 +935,12 @@ where
 /// If `instart` is larger than 0, it uses values before `instart` as starting
 /// dictionary.
 pub fn lz77_optimal<C: Cache>(
-    s: ZopfliBlockState<C>,
+    lmc: &mut C,
     in_data: &[u8],
-    max_iterations: Option<u64>,
-    max_iterations_without_improvement: Option<u64>,
+    instart: usize,
+    inend: usize,
+    max_iterations: u64,
+    max_iterations_without_improvement: u64,
 ) -> Lz77Store {
     const POPULATION_SIZE: usize = 256;
     const SELECTION_RATIO: f64 = 0.35;
@@ -959,15 +955,13 @@ pub fn lz77_optimal<C: Cache>(
     const MUTATE_BY_COPYING_DIST: Lazy<Bernoulli> =
         Lazy::new(|| Bernoulli::new(MUTATE_BY_COPYING_CHANCE).unwrap());
 
-    let instart = s.blockstart;
-    let inend = s.blockend;
     /* Dist to get to here with smallest cost. */
     let mut outputstore = Lz77Store::new();
 
     /* Initial run. */
-    outputstore.greedy(s.lmc.lock().unwrap().deref_mut(), in_data, instart, inend);
+    outputstore.greedy(lmc, in_data, instart, inend);
     let best_before_ga = lz77_deterministic_loop(
-        s.lmc.lock().unwrap().deref_mut(),
+        lmc,
         in_data,
         instart,
         inend,
@@ -982,7 +976,14 @@ pub fn lz77_optimal<C: Cache>(
     let max_dist_freq = *best_before_ga.stats.dists.iter().max().unwrap();
     let genome_builder =
         SymbolTableBuilder::new(best_stats_before_ga, max_dist_freq, max_litlen_freq);
-    *(s.best.write().unwrap().deref_mut()) = Some(best_before_ga);
+    let s = ZopfliGaState {
+        best: Arc::new(RwLock::new(best_before_ga)),
+        score_cache: MokaCache::new(SCORE_CACHE_SIZE).into(),
+        lmc: Arc::new(Mutex::new(ZopfliLongestMatchCache::new(inend - instart))),
+        data: &in_data,
+        blockstart: instart,
+        blockend: inend
+    };
     let initial_population = build_population()
         .with_genome_builder(genome_builder)
         .of_size(POPULATION_SIZE)
@@ -1041,12 +1042,12 @@ pub fn lz77_optimal<C: Cache>(
                     processing_time,
                     stop_reason
                 );
-                let mut best_after_ga = s.best.read().unwrap().clone().unwrap().stored;
+                let mut best_after_ga = s.best.read().unwrap().stored.clone();
                 let mut best_stats_after_ga = SymbolStats::default();
                 best_stats_after_ga.get_statistics(&best_after_ga);
                 if best_stats_after_ga.table != best_stats_before_ga {
                     lz77_deterministic_loop(
-                        s.lmc.lock().unwrap().deref_mut(),
+                        lmc,
                         in_data,
                         instart,
                         inend,
@@ -1069,7 +1070,8 @@ fn lz77_deterministic_loop<C: Cache>(
     outputstore: &mut Lz77Store,
 ) -> ZopfliOutput {
     let mut last_cost = f64::INFINITY;
-    let mut current_store = Lz77Store::new();
+    let mut lz77_store = LZ77_STORE_POOL.pull();
+    let current_store = lz77_store.deref_mut();
     let mut best_cost =
         calculate_block_size(&outputstore, 0, outputstore.size(), BlockType::Dynamic);
     let mut stats = SymbolStats::default();
@@ -1085,7 +1087,7 @@ fn lz77_deterministic_loop<C: Cache>(
             instart,
             inend,
             |a, b| get_cost_stat(a, b, &stats),
-            &mut current_store,
+            current_store,
             &mut h,
         );
         let cost =
