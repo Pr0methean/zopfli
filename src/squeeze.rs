@@ -27,7 +27,7 @@ use genevo::{
     termination::{StopFlag, Termination},
 };
 use lockfree_object_pool::LinearObjectPool;
-use log::debug;
+use log::{debug, info};
 use once_cell::sync::Lazy;
 use ordered_float::OrderedFloat;
 use rand::{
@@ -656,12 +656,20 @@ pub struct SymbolTableBuilder {
 }
 
 impl SymbolTableBuilder {
-    fn new(first_guess: SymbolTable, max_litlen_freq: usize, max_dist_freq: usize) -> Self {
+    fn new(first_guess: SymbolTable, second_guess: SymbolTable,
+           max_litlen_freq: usize, max_dist_freq: usize) -> Self {
         let mut fixed_litlens = Vec::with_capacity(4);
         let mut fixed_dists = Vec::with_capacity(4);
         fixed_litlens.push(first_guess.litlens);
+        fixed_litlens.push(second_guess.litlens);
         fixed_dists.push(first_guess.dists);
+        fixed_dists.push(second_guess.dists);
         let mut sorted_litlens = first_guess.litlens;
+        sorted_litlens.sort_unstable();
+        sorted_litlens.reverse();
+        sorted_litlens[256] = 1; // End symbol
+        fixed_litlens.push(sorted_litlens);
+        let mut sorted_litlens = second_guess.litlens;
         sorted_litlens.sort_unstable();
         sorted_litlens.reverse();
         sorted_litlens[256] = 1; // End symbol
@@ -672,6 +680,17 @@ impl SymbolTableBuilder {
             sorted_dists.reverse();
             let mut sorted_dists = sorted_dists.into_iter();
             let mut nonzero_sorted_dists = first_guess.dists.clone();
+            for dist in nonzero_sorted_dists.iter_mut() {
+                if *dist != 0 {
+                    *dist = sorted_dists.next().unwrap();
+                }
+            }
+            fixed_dists.push(nonzero_sorted_dists);
+            let mut sorted_dists = second_guess.dists;
+            sorted_dists.sort_unstable();
+            sorted_dists.reverse();
+            let mut sorted_dists = sorted_dists.into_iter();
+            let mut nonzero_sorted_dists = second_guess.dists.clone();
             for dist in nonzero_sorted_dists.iter_mut() {
                 if *dist != 0 {
                     *dist = sorted_dists.next().unwrap();
@@ -715,6 +734,7 @@ impl SymbolTableBuilder {
                 })
             })
             .collect();
+        info!("Fixed population size is {}", fixed_population.len());
         SymbolTableBuilder {
             first_guess,
             max_litlen_freq,
@@ -981,6 +1001,8 @@ pub fn lz77_optimal(
     /* Initial run. */
     let mut lmc = ZopfliLongestMatchCache::new(inend - instart);
     outputstore.greedy(&mut lmc, in_data, instart, inend);
+    let mut greedy_stats = SymbolStats::default();
+    greedy_stats.get_statistics(&outputstore);
     let best_before_ga = lz77_deterministic_loop(
         &mut lmc,
         in_data,
@@ -993,11 +1015,11 @@ pub fn lz77_optimal(
         "Symbol table at start of GA run: {:?}",
         best_stats_before_ga
     );
-    let max_litlen_freq = *best_before_ga.stats.litlens.iter().max().unwrap();
-    let max_dist_freq = *best_before_ga.stats.dists.iter().max().unwrap();
+    let max_litlen_freq = *best_before_ga.stats.litlens.iter().chain(greedy_stats.table.litlens.iter()).max().unwrap();
+    let max_dist_freq = *best_before_ga.stats.dists.iter().chain(greedy_stats.table.dists.iter()).max().unwrap();
     let genome_builder =
-        SymbolTableBuilder::new(best_stats_before_ga, max_dist_freq, max_litlen_freq);
-    let mut score_cache = MokaCache::new(SCORE_CACHE_SIZE);
+        SymbolTableBuilder::new(best_stats_before_ga, greedy_stats.table, max_dist_freq, max_litlen_freq);
+    let score_cache = MokaCache::new(SCORE_CACHE_SIZE);
     let mut prev_best = -best_before_ga.cost;
     // score_cache.insert(best_before_ga.stats, prev_best);
     let s = ZopfliGaState {
