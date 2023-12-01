@@ -661,19 +661,24 @@ impl SymbolTableBuilder {
         let mut fixed_litlens = Vec::with_capacity(4);
         let mut fixed_dists = Vec::with_capacity(4);
         fixed_litlens.push(first_guess.litlens);
-        fixed_litlens.push(second_guess.litlens);
         fixed_dists.push(first_guess.dists);
-        fixed_dists.push(second_guess.dists);
+
         let mut sorted_litlens = first_guess.litlens;
         sorted_litlens.sort_unstable();
         sorted_litlens.reverse();
         sorted_litlens[256] = 1; // End symbol
         fixed_litlens.push(sorted_litlens);
-        let mut sorted_litlens = second_guess.litlens;
-        sorted_litlens.sort_unstable();
-        sorted_litlens.reverse();
-        sorted_litlens[256] = 1; // End symbol
-        fixed_litlens.push(sorted_litlens);
+        if second_guess.litlens != first_guess.litlens {
+            fixed_litlens.push(second_guess.litlens);
+            let mut sorted_litlens = second_guess.litlens;
+            sorted_litlens.sort_unstable();
+            sorted_litlens.reverse();
+            sorted_litlens[256] = 1; // End symbol
+            fixed_litlens.push(sorted_litlens);
+        }
+        if second_guess.dists != first_guess.dists {
+            fixed_dists.push(second_guess.dists);
+        }
         if max_dist_freq > 1 {
             let mut sorted_dists = first_guess.dists;
             sorted_dists.sort_unstable();
@@ -686,17 +691,19 @@ impl SymbolTableBuilder {
                 }
             }
             fixed_dists.push(nonzero_sorted_dists);
-            let mut sorted_dists = second_guess.dists;
-            sorted_dists.sort_unstable();
-            sorted_dists.reverse();
-            let mut sorted_dists = sorted_dists.into_iter();
-            let mut nonzero_sorted_dists = second_guess.dists.clone();
-            for dist in nonzero_sorted_dists.iter_mut() {
-                if *dist != 0 {
-                    *dist = sorted_dists.next().unwrap();
+            if second_guess.dists != first_guess.dists {
+                let mut sorted_dists = second_guess.dists;
+                sorted_dists.sort_unstable();
+                sorted_dists.reverse();
+                let mut sorted_dists = sorted_dists.into_iter();
+                let mut nonzero_sorted_dists = second_guess.dists.clone();
+                for dist in nonzero_sorted_dists.iter_mut() {
+                    if *dist != 0 {
+                        *dist = sorted_dists.next().unwrap();
+                    }
                 }
+                fixed_dists.push(nonzero_sorted_dists);
             }
-            fixed_dists.push(nonzero_sorted_dists);
         } else {
             let mut sorted_dists = first_guess.dists;
             sorted_dists.sort();
