@@ -102,13 +102,19 @@ pub struct Options {
     pub maximum_block_splits: u16,
 }
 
-impl Default for Options {
-    fn default() -> Options {
+impl Options {
+    pub const fn const_default() -> Options {
         Options {
-            iteration_count: NonZeroU64::new(15).unwrap(),
-            iterations_without_improvement: NonZeroU64::new(u64::MAX).unwrap(),
+            iteration_count: unsafe { NonZeroU64::new_unchecked(15) },
+            iterations_without_improvement: unsafe { NonZeroU64::new_unchecked(u64::MAX) },
             maximum_block_splits: 15,
         }
+    }
+}
+
+impl Default for Options {
+    fn default() -> Options {
+        Self::const_default()
     }
 }
 
