@@ -657,7 +657,13 @@ pub struct SymbolTableBuilder {
 
 impl SymbolTableBuilder {
     fn new(first_guess: SymbolTable, second_guess: SymbolTable,
-           max_litlen_freq: usize, max_dist_freq: usize) -> Self {
+           mut max_litlen_freq: usize, mut max_dist_freq: usize) -> Self {
+        if max_litlen_freq == 0 {
+            max_litlen_freq = 1;
+        }
+        if max_dist_freq == 0 {
+            max_dist_freq = 1;
+        }
         let mut fixed_litlens = Vec::with_capacity(4);
         let mut fixed_dists = Vec::with_capacity(4);
         fixed_litlens.push(first_guess.litlens);
