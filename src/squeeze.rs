@@ -708,8 +708,8 @@ impl SymbolTableBuilder {
 
                 fixed_dists.push(mostly_sorted_dists);
                 sorted_dists.reverse();
+                fixed_dists.push(sorted_dists.iter().copied().collect::<Vec<_>>().try_into().unwrap());
                 let mut sorted_dists = sorted_dists.into_iter();
-                fixed_dists.push(sorted_dists.collect());
                 let mut nonzero_sorted_dists = second_guess.dists.clone();
                 for dist in nonzero_sorted_dists.iter_mut() {
                     if *dist != 0 {
