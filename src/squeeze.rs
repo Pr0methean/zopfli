@@ -681,6 +681,7 @@ impl SymbolTableBuilder {
         }
         if max_dist_freq > 1 {
             let mut sorted_dists = first_guess.dists;
+            fixed_dists.push(sorted_dists);
             sorted_dists.sort_unstable();
             sorted_dists.reverse();
             let mut sorted_dists = sorted_dists.into_iter();
@@ -694,6 +695,7 @@ impl SymbolTableBuilder {
             if second_guess.dists != first_guess.dists {
                 let mut sorted_dists = second_guess.dists;
                 sorted_dists.sort_unstable();
+                fixed_dists.push(sorted_dists);
                 sorted_dists.reverse();
                 let mut sorted_dists = sorted_dists.into_iter();
                 let mut nonzero_sorted_dists = second_guess.dists.clone();
