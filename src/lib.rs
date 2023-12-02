@@ -103,8 +103,10 @@ pub struct Options {
 }
 
 impl Options {
+    /// Returns a default instance. Can be called from a `const` context.
     pub const fn const_default() -> Options {
         Options {
+            // SAFETY: new_unchecked is safe as long as the input definitely isn't zero
             iteration_count: unsafe { NonZeroU64::new_unchecked(15) },
             iterations_without_improvement: unsafe { NonZeroU64::new_unchecked(u64::MAX) },
             maximum_block_splits: 15,
