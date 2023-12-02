@@ -695,9 +695,15 @@ impl SymbolTableBuilder {
             if second_guess.dists != first_guess.dists {
                 let mut sorted_dists = second_guess.dists;
                 sorted_dists.sort_unstable();
-                fixed_dists.push(sorted_dists);
+                let mut mostly_sorted_dists = sorted_dists;
+
+                // dists[0] almost always ends up with the largest value
+                mostly_sorted_dists[0] = mostly_sorted_dists[ZOPFLI_NUM_D - 1];
+
+                fixed_dists.push(mostly_sorted_dists);
                 sorted_dists.reverse();
                 let mut sorted_dists = sorted_dists.into_iter();
+                fixed_dists.push(sorted_dists.collect());
                 let mut nonzero_sorted_dists = second_guess.dists.clone();
                 for dist in nonzero_sorted_dists.iter_mut() {
                     if *dist != 0 {
@@ -709,6 +715,12 @@ impl SymbolTableBuilder {
         } else {
             let mut sorted_dists = first_guess.dists;
             sorted_dists.sort();
+            let mut mostly_sorted_dists = sorted_dists;
+
+            // dists[0] almost always ends up with the largest value
+            mostly_sorted_dists[0] = mostly_sorted_dists[ZOPFLI_NUM_D - 1];
+
+            fixed_dists.push(mostly_sorted_dists);
             sorted_dists.reverse();
             fixed_dists.push(sorted_dists);
         }
