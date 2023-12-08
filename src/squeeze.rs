@@ -664,8 +664,8 @@ impl SymbolTableBuilder {
         if max_dist_freq == 0 {
             max_dist_freq = 1;
         }
-        let mut fixed_litlens = Vec::with_capacity(4);
-        let mut fixed_dists = Vec::with_capacity(4);
+        let mut fixed_litlens = Vec::with_capacity(8);
+        let mut fixed_dists = Vec::with_capacity(8);
         fixed_litlens.push(first_guess.litlens);
         fixed_dists.push(first_guess.dists);
 
